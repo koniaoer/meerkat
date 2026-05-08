@@ -27,7 +27,7 @@ services:
       - AI_MAX_TOKENS=2000
       - DATABASE_URL=postgresql://meerkat:meerkat_secure_2026@postgres:5432/meerkat
       - JWT_SECRET_KEY=meerkat_jwt_production_key_2026
-      - ENCRYPTION_KEY=YW5kcm9pZHNlY3JldGtleWZvcm1lZXJrYXRwcm9k
+      - ENCRYPTION_KEY=3mnJfNWaQRo0uyauoe-7EHDIxezefYOQwi5118W4MOA=
     depends_on:
       postgres:
         condition: service_healthy

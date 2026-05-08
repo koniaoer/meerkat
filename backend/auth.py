@@ -87,8 +87,15 @@ async def require_auth(current_user: models.User = Depends(get_current_user)) ->
     return current_user
 
 # API Key encryption (Fernet symmetric encryption)
-_encryption_key = os.environ.get("ENCRYPTION_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)))
-_fernet = Fernet(_encryption_key if isinstance(_encryption_key, bytes) else _encryption_key.encode())
+_encryption_key_env = os.environ.get("ENCRYPTION_KEY", "")
+try:
+    if _encryption_key_env:
+        _fernet = Fernet(_encryption_key_env.encode())
+    else:
+        _fernet = Fernet(base64.urlsafe_b64encode(secrets.token_bytes(32)))
+except (ValueError, Exception):
+    # ENCRYPTION_KEY is not a valid Fernet key, generate one
+    _fernet = Fernet(base64.urlsafe_b64encode(secrets.token_bytes(32)))
 
 def encrypt_value(plain_text: str) -> str:
     """Encrypt a sensitive value (API key, secret, etc.)"""
