@@ -6,15 +6,17 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
       - backend_data:/app/data
     environment:
-      - DATABASE_URL=sqlite:////app/data/meerkat.db
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:80
+      - AI_TEMPERATURE=0.7
+      - AI_MAX_TOKENS=2000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   frontend:
     build: ./frontend
