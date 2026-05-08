@@ -69,5 +69,17 @@ async def analyze_alert_with_ai(alert_data: dict, config: ModelConfig) -> dict:
         
         return result
     except Exception as e:
-        logger.error("AI Analysis failed: %s", str(e), exc_info=True)
-        return {"summary": f"AI Analysis failed: {str(e)}", "root_cause": "", "suggestion": "", "severity": "low"}
+        error_msg = str(e)
+        logger.error("AI Analysis failed: %s", error_msg, exc_info=True)
+        
+        # 友好错误提示
+        if "404" in error_msg:
+            hint = f"API 返回 404，请检查 Base URL 和模型名称是否正确 (base_url={config.base_url}, model={config.model_name})"
+        elif "401" in error_msg or "Authentication" in error_msg:
+            hint = "API 认证失败，请检查 API Key 是否正确"
+        elif "Connection" in error_msg:
+            hint = f"无法连接 API 服务器，请检查 Base URL 是否可达 ({config.base_url})"
+        else:
+            hint = f"AI 分析失败: {error_msg}"
+        
+        return {"summary": hint, "root_cause": "", "suggestion": "", "severity": "low"}

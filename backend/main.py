@@ -97,7 +97,7 @@ async def test_model_config(config: schemas.ModelConfigCreate):
     temp_config = models.ModelConfig(**config.model_dump())
     result = await ai_service.analyze_alert_with_ai({"test": "connection"}, temp_config)
     
-    if "AI Analysis failed" in result.get("summary", ""):
+    if "404" in result.get("summary", "") or "认证失败" in result.get("summary", "") or "无法连接" in result.get("summary", "") or "AI 分析失败" in result.get("summary", ""):
         raise HTTPException(status_code=400, detail=result["summary"])
     
     logger.info("Model config test connection successful")

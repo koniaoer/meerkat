@@ -76,7 +76,7 @@ class TestAnalyzeAlertWithAI:
 
             result = await ai_service.analyze_alert_with_ai(sample_alert_data, mock_config)
 
-        assert "AI Analysis failed" in result or "failed" in str(result).lower()
+        assert "AI 分析失败" in result.get("summary", "") or "failed" in str(result).lower()
 
 
 class TestDingTalkSigning:
