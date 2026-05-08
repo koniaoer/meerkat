@@ -81,15 +81,24 @@ async def test_dingtalk_config(config: schemas.DingTalkConfigCreate):
         "status": "firing",
         "annotations": {"summary": "This is a test notification from Meerkat."}
     }
-    test_analysis = "Test AI analysis content."
+    test_analysis = {"summary": "这是一条来自 Meerkat 的测试消息", "root_cause": "", "suggestion": "", "severity": "info"}
     
     try:
         await dingtalk_service.send_dingtalk_notification(test_alert, test_analysis, temp_config)
         logger.info("DingTalk test notification sent successfully")
         return {"status": "success", "message": "Test message sent to DingTalk"}
     except Exception as e:
-        logger.error("DingTalk test failed: %s", str(e), exc_info=True)
-        raise HTTPException(status_code=400, detail=f"DingTalk test failed: {str(e)}")
+        error_msg = str(e)
+        logger.error("DingTalk test failed: %s", error_msg, exc_info=True)
+        if "token" in error_msg.lower() or "invalid" in error_msg.lower():
+            hint = "钉钉推送失败：Webhook 地址无效，请检查 access_token"
+        elif "sign" in error_msg.lower() or "secret" in error_msg.lower():
+            hint = "钉钉推送失败：加签验证不通过，请检查 Secret 是否正确"
+        elif "Connection" in error_msg or "timeout" in error_msg.lower():
+            hint = "钉钉推送失败：无法连接钉钉服务器，请检查网络和 Webhook 地址"
+        else:
+            hint = f"钉钉推送失败: {error_msg}"
+        raise HTTPException(status_code=400, detail=hint)
 
 @app.post("/api/v1/model-configs/test")
 async def test_model_config(config: schemas.ModelConfigCreate):

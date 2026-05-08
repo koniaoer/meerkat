@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Input, Switch, Space, message, Popconfirm } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
-import { getDingTalkConfigs, createDingTalkConfig, updateDingTalkConfig, deleteDingTalkConfig } from '../services/api';
+import { PlusOutlined, EditOutlined, DeleteOutlined, SendOutlined } from '@ant-design/icons';
+import { getDingTalkConfigs, createDingTalkConfig, updateDingTalkConfig, deleteDingTalkConfig, testDingTalkConfig } from '../services/api';
 import { useLanguage } from '../services/i18n';
 
 const DingTalkConfigPage: React.FC = () => {
@@ -9,6 +9,7 @@ const DingTalkConfigPage: React.FC = () => {
   const [configs, setConfigs] = useState([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState<any>(null);
+  const [testLoading, setTestLoading] = useState(false);
   const [form] = Form.useForm();
 
   const fetchConfigs = async () => {
@@ -35,6 +36,10 @@ const DingTalkConfigPage: React.FC = () => {
     setIsModalVisible(true);
   };
 
+  const handleCancel = () => {
+    setIsModalVisible(false);
+  };
+
   const onFinish = async (values: any) => {
     try {
       if (editingConfig) {
@@ -47,6 +52,20 @@ const DingTalkConfigPage: React.FC = () => {
       fetchConfigs();
     } catch (error) {
       message.error(t('failed'));
+    }
+  };
+
+  const handleTest = async () => {
+    try {
+      const values = await form.validateFields();
+      setTestLoading(true);
+      await testDingTalkConfig(values);
+      message.success(t('testSuccess'));
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.detail || t('testFailed');
+      message.error(errorMsg);
+    } finally {
+      setTestLoading(false);
     }
   };
 
@@ -96,12 +115,12 @@ const DingTalkConfigPage: React.FC = () => {
       <Modal
         title={editingConfig ? t('editConfig') : t('addConfig')}
         open={isModalVisible}
-        onCancel={() => setIsModalVisible(false)}
+        onCancel={handleCancel}
         footer={null}
       >
         <Form form={form} layout="vertical" onFinish={onFinish}>
           <Form.Item name="webhook_url" label={t('webhookUrl')} rules={[{ required: true }]}>
-            <Input placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." />
+            <Input placeholder="https://oapi.dingtalk.com/robot/send?access_token=***" />
           </Form.Item>
           <Form.Item name="secret" label={t('secret')}>
             <Input.Password placeholder="Optional secret for signing" />
@@ -110,9 +129,18 @@ const DingTalkConfigPage: React.FC = () => {
             <Switch defaultChecked />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" block>
-              {t('save')}
-            </Button>
+            <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <Button 
+                icon={<SendOutlined />} 
+                onClick={handleTest} 
+                loading={testLoading}
+              >
+                {t('testDingTalk')}
+              </Button>
+              <Button type="primary" htmlType="submit">
+                {t('save')}
+              </Button>
+            </Space>
           </Form.Item>
         </Form>
       </Modal>
