@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: meerkat
+      POSTGRES_USER: meerkat
+      POSTGRES_PASSWORD: meerkat_secure_2026
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meerkat"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     ports:
@@ -9,6 +25,12 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost:80
       - AI_TEMPERATURE=0.7
       - AI_MAX_TOKENS=2000
+      - DATABASE_URL=postgresql://meerkat:meerkat_secure_2026@postgres:5432/meerkat
+      - JWT_SECRET_KEY=meerkat_jwt_production_key_2026
+      - ENCRYPTION_KEY=YW5kcm9pZHNlY3JldGtleWZvcm1lZXJrYXRwcm9k
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -26,3 +48,4 @@ services:
 
 volumes:
   backend_data:
+  postgres_data:

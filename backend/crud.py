@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
 import models, schemas
 from logger import logger
 
@@ -67,6 +68,108 @@ def create_alert(db: Session, alert: schemas.AlertCreate, analysis_result: str =
 
 def get_alerts(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Alert).order_by(models.Alert.created_at.desc()).offset(skip).limit(limit).all()
+
+def get_alert_by_fingerprint(db: Session, fingerprint: str):
+    """Find a firing alert with same fingerprint (for dedup/resolved handling)"""
+    return db.query(models.Alert).filter(
+        models.Alert.fingerprint == fingerprint,
+        models.Alert.status == "firing"
+    ).first()
+
+def resolve_alert(db: Session, alert_id: int):
+    """Mark alert as resolved"""
+    db_alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
+    if db_alert:
+        db_alert.status = "resolved"
+        db_alert.resolved_at = datetime.utcnow()
+        db.commit()
+        db.refresh(db_alert)
+    return db_alert
+
+def acknowledge_alert(db: Session, alert_id: int, acknowledged_by: str):
+    """Acknowledge an alert"""
+    db_alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
+    if db_alert:
+        db_alert.acknowledged = True
+        db_alert.acknowledged_by = acknowledged_by
+        db_alert.acknowledged_at = datetime.utcnow()
+        db.commit()
+        db.refresh(db_alert)
+    return db_alert
+
+def silence_alert(db: Session, alert_id: int, duration_minutes: int):
+    """Silence an alert for given duration"""
+    db_alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
+    if db_alert:
+        db_alert.silenced_until = datetime.utcnow() + timedelta(minutes=duration_minutes)
+        db.commit()
+        db.refresh(db_alert)
+    return db_alert
+
+def get_alert_stats(db: Session):
+    """Get alert statistics"""
+    alerts = db.query(models.Alert).all()
+    return {
+        "total": len(alerts),
+        "firing": len([a for a in alerts if a.status == "firing"]),
+        "resolved": len([a for a in alerts if a.status == "resolved"]),
+        "acknowledged": len([a for a in alerts if a.acknowledged]),
+        "by_severity": {s: len([a for a in alerts if a.severity == s]) for s in set(a.severity for a in alerts)}
+    }
+
+def get_alerts_with_filters(db: Session, status: str = None, severity: str = None, acknowledged: bool = None, skip: int = 0, limit: int = 100):
+    """Get alerts with filters"""
+    query = db.query(models.Alert)
+    if status:
+        query = query.filter(models.Alert.status == status)
+    if severity:
+        query = query.filter(models.Alert.severity == severity)
+    if acknowledged is not None:
+        query = query.filter(models.Alert.acknowledged == acknowledged)
+    return query.order_by(models.Alert.created_at.desc()).offset(skip).limit(limit).all()
+
+# User CRUD
+def get_user_by_username(db: Session, username: str):
+    return db.query(models.User).filter(models.User.username == username).first()
+
+def create_user(db: Session, username: str, hashed_password: str):
+    db_user = models.User(username=username, hashed_password=hashed_password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+# NotificationChannel CRUD
+def get_notification_channels(db: Session):
+    return db.query(models.NotificationChannel).all()
+
+def get_active_notification_channels(db: Session):
+    return db.query(models.NotificationChannel).filter(models.NotificationChannel.is_active == True).all()
+
+def get_notification_channel(db: Session, channel_id: int):
+    return db.query(models.NotificationChannel).filter(models.NotificationChannel.id == channel_id).first()
+
+def create_notification_channel(db: Session, channel: schemas.NotificationChannelCreate):
+    db_channel = models.NotificationChannel(**channel.model_dump())
+    db.add(db_channel)
+    db.commit()
+    db.refresh(db_channel)
+    return db_channel
+
+def update_notification_channel(db: Session, channel_id: int, channel: schemas.NotificationChannelCreate):
+    db_channel = get_notification_channel(db, channel_id)
+    if db_channel:
+        for key, value in channel.model_dump().items():
+            setattr(db_channel, key, value)
+        db.commit()
+        db.refresh(db_channel)
+    return db_channel
+
+def delete_notification_channel(db: Session, channel_id: int):
+    db_channel = get_notification_channel(db, channel_id)
+    if db_channel:
+        db.delete(db_channel)
+        db.commit()
 
 # DingTalk Config CRUD
 def get_dingtalk_configs(db: Session):

@@ -7,3 +7,9 @@ openai
 pydantic
 pydantic-settings
 python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt<4.2
+cryptography
+aiosmtplib
+psycopg2-binary

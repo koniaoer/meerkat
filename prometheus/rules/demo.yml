@@ -1,0 +1,22 @@
+groups:
+  - name: meerkat-demo
+    rules:
+      # 示例：模拟高内存告警（测试用）
+      - alert: HighMemoryUsage
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "内存可用率低于 10%"
+          description: "当前可用内存仅 {{ $value | humanizePercentage }}"
+
+      # 示例：模拟服务宕机
+      - alert: ServiceDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "服务 {{ $labels.instance }} 宕机"
+          description: "目标 {{ $labels.instance }} 已离线超过 30 秒"

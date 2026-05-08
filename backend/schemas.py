@@ -41,7 +41,7 @@ class AlertBase(BaseModel):
     raw_data: str
 
 class AlertCreate(AlertBase):
-    pass
+    fingerprint: Optional[str] = None
 
 class Alert(AlertBase):
     id: int
@@ -50,10 +50,28 @@ class Alert(AlertBase):
     analysis_root_cause: Optional[str] = None
     analysis_suggestion: Optional[str] = None
     analysis_severity: Optional[str] = None
+    fingerprint: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+    acknowledged: Optional[bool] = False
+    acknowledged_by: Optional[str] = None
+    acknowledged_at: Optional[datetime] = None
+    silenced_until: Optional[datetime] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+class AlertUpdate(BaseModel):
+    acknowledged: Optional[bool] = None
+    acknowledged_by: Optional[str] = None
+    silenced_until: Optional[datetime] = None
+
+class AlertStats(BaseModel):
+    total: int
+    firing: int
+    resolved: int
+    acknowledged: int
+    by_severity: Dict[str, int]
 
 # Prometheus Alertmanager structure
 class PrometheusAlert(BaseModel):
@@ -76,3 +94,43 @@ class PrometheusWebhook(BaseModel):
     version: str
     groupKey: str
     truncatedAlerts: int = 0
+
+# User schemas
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+# NotificationChannel schemas
+class NotificationChannelCreate(BaseModel):
+    channel_type: str  # dingtalk/wechat/slack/email/webhook
+    name: str
+    config: str  # JSON string
+    is_active: bool = True
+
+class NotificationChannelResponse(BaseModel):
+    id: int
+    channel_type: str
+    name: str
+    config: str
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

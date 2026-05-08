@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from database import Base, get_db
-from models import ModelConfig, DingTalkConfig, Alert
+from models import ModelConfig, DingTalkConfig, Alert, User, NotificationChannel
 
 
 # 使用内存 SQLite 做测试，不碰真实数据

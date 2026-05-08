@@ -35,4 +35,27 @@ class Alert(Base):
     analysis_suggestion = Column(String, nullable=True)
     analysis_severity = Column(String, nullable=True)
     raw_data = Column(Text)  # Store full JSON as string
+    fingerprint = Column(String, index=True, nullable=True)  # alert dedup key
+    resolved_at = Column(DateTime, nullable=True)  # when alert was resolved
+    acknowledged = Column(Boolean, default=False)  # whether acknowledged
+    acknowledged_by = Column(String, nullable=True)  # who acknowledged
+    acknowledged_at = Column(DateTime, nullable=True)  # when acknowledged
+    silenced_until = Column(DateTime, nullable=True)  # silence deadline
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class NotificationChannel(Base):
+    __tablename__ = "notification_channels"
+    id = Column(Integer, primary_key=True, index=True)
+    channel_type = Column(String)  # dingtalk/wechat/slack/email/webhook
+    name = Column(String)
+    config = Column(Text)  # JSON string with channel-specific config
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
