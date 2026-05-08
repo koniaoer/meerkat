@@ -21,7 +21,7 @@ export const translations: Translation = {
   addConfig: { zh: '新增配置', en: 'Add Config' },
   editConfig: { zh: '编辑配置', en: 'Edit Config' },
   testDingTalk: { zh: '测试推送', en: 'Test Push' },
-};  // Overview
+  // Overview
   activeAlerts: { zh: '活跃告警', en: 'Active Alerts' },
   activeModel: { zh: '当前激活模型', en: 'Active Model' },
   totalAlerts: { zh: '累计处理告警', en: 'Total Alerts Processed' },
