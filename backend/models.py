@@ -30,5 +30,9 @@ class Alert(Base):
     summary = Column(Text)
     description = Column(Text)
     analysis_result = Column(Text, nullable=True)
+    analysis_summary = Column(String, nullable=True)
+    analysis_root_cause = Column(String, nullable=True)
+    analysis_suggestion = Column(String, nullable=True)
+    analysis_severity = Column(String, nullable=True)
     raw_data = Column(Text)  # Store full JSON as string
     created_at = Column(DateTime, default=datetime.utcnow)

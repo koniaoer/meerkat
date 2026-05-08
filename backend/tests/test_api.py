@@ -141,7 +141,7 @@ class TestAlertAPI:
         }
 
         with patch("main.ai_service.analyze_alert_with_ai", new_callable=AsyncMock) as mock_ai:
-            mock_ai.return_value = "Test analysis result"
+            mock_ai.return_value = {"summary": "Test analysis", "root_cause": "", "suggestion": "", "severity": "low"}
             with patch("main.dingtalk_service.send_dingtalk_notification", new_callable=AsyncMock):
                 response = client.post("/api/v1/alerts", json=webhook_payload)
 

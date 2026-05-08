@@ -6,10 +6,21 @@ import base64
 import urllib.parse
 import json
 from models import DingTalkConfig
+from logger import logger
 
-async def send_dingtalk_notification(alert_data: dict, analysis_result: str, config: DingTalkConfig):
+async def send_dingtalk_notification(alert_data: dict, analysis_result, config: DingTalkConfig):
     if not config or not config.webhook_url:
         return
+    
+    # Support both dict (structured) and str (legacy) analysis_result
+    if isinstance(analysis_result, dict):
+        ai_summary = analysis_result.get("summary", "N/A")
+        ai_root_cause = analysis_result.get("root_cause", "N/A")
+        ai_suggestion = analysis_result.get("suggestion", "N/A")
+        ai_severity = analysis_result.get("severity", "N/A")
+        ai_text = f"摘要: {ai_summary}\n\n根因: {ai_root_cause}\n\n建议: {ai_suggestion}\n\nAI评估严重程度: {ai_severity}"
+    else:
+        ai_text = str(analysis_result)
     
     webhook_url = config.webhook_url
     
@@ -37,7 +48,7 @@ async def send_dingtalk_notification(alert_data: dict, analysis_result: str, con
                        f"**摘要**: {alert_data.get('annotations', {}).get('summary', 'N/A')}\n\n" \
                        f"---\n\n" \
                        f"**🤖 AI 分析建议**:\n\n" \
-                       f"{analysis_result}\n\n" \
+                       f"{ai_text}\n\n" \
                        f"---\n\n" \
                        f"[查看详情](http://localhost:3000/alerts)"
 
@@ -52,5 +63,6 @@ async def send_dingtalk_notification(alert_data: dict, analysis_result: str, con
     async with httpx.AsyncClient() as client:
         try:
             await client.post(webhook_url, json=payload)
+            logger.info("DingTalk notification sent successfully for alert: %s", alert_name)
         except Exception as e:
-            print(f"Failed to send DingTalk notification: {str(e)}")
+            logger.error("Failed to send DingTalk notification: %s", str(e), exc_info=True)

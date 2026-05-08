@@ -46,6 +46,10 @@ class AlertCreate(AlertBase):
 class Alert(AlertBase):
     id: int
     analysis_result: Optional[str] = None
+    analysis_summary: Optional[str] = None
+    analysis_root_cause: Optional[str] = None
+    analysis_suggestion: Optional[str] = None
+    analysis_severity: Optional[str] = None
     created_at: datetime
 
     class Config:

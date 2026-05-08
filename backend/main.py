@@ -6,6 +6,7 @@ import json
 
 import models, schemas, crud, ai_service, dingtalk_service
 from database import engine, get_db
+from logger import logger
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -18,6 +19,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logger.info("Meerkat AI Bot API started")
 
 @app.get("/health")
 def health_check():
@@ -82,8 +85,10 @@ async def test_dingtalk_config(config: schemas.DingTalkConfigCreate):
     
     try:
         await dingtalk_service.send_dingtalk_notification(test_alert, test_analysis, temp_config)
+        logger.info("DingTalk test notification sent successfully")
         return {"status": "success", "message": "Test message sent to DingTalk"}
     except Exception as e:
+        logger.error("DingTalk test failed: %s", str(e), exc_info=True)
         raise HTTPException(status_code=400, detail=f"DingTalk test failed: {str(e)}")
 
 @app.post("/api/v1/model-configs/test")
@@ -92,9 +97,10 @@ async def test_model_config(config: schemas.ModelConfigCreate):
     temp_config = models.ModelConfig(**config.model_dump())
     result = await ai_service.analyze_alert_with_ai({"test": "connection"}, temp_config)
     
-    if "AI Analysis failed" in result:
-        raise HTTPException(status_code=400, detail=result)
+    if "AI Analysis failed" in result.get("summary", ""):
+        raise HTTPException(status_code=400, detail=result["summary"])
     
+    logger.info("Model config test connection successful")
     return {"status": "success", "message": "Connection successful", "response": result}
 
 # Alert Endpoints
@@ -118,14 +124,15 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
         # 2. Call AI for analysis
         analysis = await ai_service.analyze_alert_with_ai(alert.model_dump(), active_config)
         
-        # 3. Save to DB
-        db_alert = crud.create_alert(db, alert_create, analysis_result=analysis)
+        # 3. Save to DB (analysis_result stores full JSON string, analysis dict provides structured fields)
+        db_alert = crud.create_alert(db, alert_create, analysis_result=json.dumps(analysis, ensure_ascii=False), analysis=analysis)
         results.append(db_alert)
         
         # 4. Send to DingTalk if active
         if dingtalk_config:
             await dingtalk_service.send_dingtalk_notification(alert.model_dump(), analysis, dingtalk_config)
-        
+    
+    logger.info("Processed %d alerts from webhook", len(results))
     return {"status": "success", "processed": len(results)}
 
 @app.get("/api/v1/alerts", response_model=List[schemas.Alert])

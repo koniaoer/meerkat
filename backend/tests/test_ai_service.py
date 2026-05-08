@@ -20,7 +20,7 @@ class TestAnalyzeAlertWithAI:
         result = asyncio.get_event_loop().run_until_complete(
             ai_service.analyze_alert_with_ai({"test": "data"}, None)
         )
-        assert result == "No active AI model configuration found."
+        assert result.get("summary") == "No active AI model configuration found."
 
     @pytest.mark.asyncio
     async def test_successful_analysis(self, sample_alert_data):

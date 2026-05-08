@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 import models, schemas
+from logger import logger
 
 def get_model_config(db: Session, config_id: int):
     return db.query(models.ModelConfig).filter(models.ModelConfig.id == config_id).first()
@@ -16,11 +17,13 @@ def create_model_config(db: Session, config: schemas.ModelConfigCreate):
     db.add(db_config)
     db.commit()
     db.refresh(db_config)
+    logger.info("Created model config: id=%d, model=%s", db_config.id, db_config.model_name)
     return db_config
 
 def update_model_config(db: Session, config_id: int, config: schemas.ModelConfigCreate):
     db_config = get_model_config(db, config_id)
     if not db_config:
+        logger.warning("Model config not found for update: id=%d", config_id)
         return None
     
     if config.is_active:
@@ -31,6 +34,7 @@ def update_model_config(db: Session, config_id: int, config: schemas.ModelConfig
     
     db.commit()
     db.refresh(db_config)
+    logger.info("Updated model config: id=%d", config_id)
     return db_config
 
 def delete_model_config(db: Session, config_id: int):
@@ -38,16 +42,27 @@ def delete_model_config(db: Session, config_id: int):
     if db_config:
         db.delete(db_config)
         db.commit()
+        logger.info("Deleted model config: id=%d", config_id)
+    else:
+        logger.warning("Model config not found for deletion: id=%d", config_id)
     return db_config
 
 def get_active_model_config(db: Session):
     return db.query(models.ModelConfig).filter(models.ModelConfig.is_active == True).first()
 
-def create_alert(db: Session, alert: schemas.AlertCreate, analysis_result: str = None):
-    db_alert = models.Alert(**alert.model_dump(), analysis_result=analysis_result)
+def create_alert(db: Session, alert: schemas.AlertCreate, analysis_result: str = None, analysis: dict = None):
+    db_alert = models.Alert(
+        **alert.model_dump(),
+        analysis_result=analysis_result,
+        analysis_summary=analysis.get("summary") if analysis else None,
+        analysis_root_cause=analysis.get("root_cause") if analysis else None,
+        analysis_suggestion=analysis.get("suggestion") if analysis else None,
+        analysis_severity=analysis.get("severity") if analysis else None,
+    )
     db.add(db_alert)
     db.commit()
     db.refresh(db_alert)
+    logger.info("Created alert record: id=%d, name=%s", db_alert.id, alert.alert_name)
     return db_alert
 
 def get_alerts(db: Session, skip: int = 0, limit: int = 100):
@@ -62,6 +77,7 @@ def create_dingtalk_config(db: Session, config: schemas.DingTalkConfigCreate):
     db.add(db_config)
     db.commit()
     db.refresh(db_config)
+    logger.info("Created DingTalk config: id=%d", db_config.id)
     return db_config
 
 def update_dingtalk_config(db: Session, config_id: int, config: schemas.DingTalkConfigCreate):
@@ -71,6 +87,9 @@ def update_dingtalk_config(db: Session, config_id: int, config: schemas.DingTalk
             setattr(db_config, key, value)
         db.commit()
         db.refresh(db_config)
+        logger.info("Updated DingTalk config: id=%d", config_id)
+    else:
+        logger.warning("DingTalk config not found for update: id=%d", config_id)
     return db_config
 
 def delete_dingtalk_config(db: Session, config_id: int):
@@ -78,6 +97,9 @@ def delete_dingtalk_config(db: Session, config_id: int):
     if db_config:
         db.delete(db_config)
         db.commit()
+        logger.info("Deleted DingTalk config: id=%d", config_id)
+    else:
+        logger.warning("DingTalk config not found for deletion: id=%d", config_id)
     return db_config
 
 def get_active_dingtalk_config(db: Session):
