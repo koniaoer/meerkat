@@ -21,7 +21,8 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      window.dispatchEvent(new Event('auth-change'));
+      // Don't force redirect — let App.tsx handle it
     }
     return Promise.reject(error);
   }
@@ -61,5 +62,11 @@ export const createDingTalkConfig = (data: any) => api.post('/dingtalk-configs',
 export const updateDingTalkConfig = (id: number, data: any) => api.put(`/dingtalk-configs/${id}`, data);
 export const deleteDingTalkConfig = (id: number) => api.delete(`/dingtalk-configs/${id}`);
 export const testDingTalkConfig = (data: any) => api.post('/dingtalk-configs/test', data);
+
+// Remediation Actions
+export const getRemediationActions = (params?: any) => api.get('/remediation-actions', { params });
+export const getRemediationAction = (id: number) => api.get(`/remediation-actions/${id}`);
+export const approveRemediationAction = (id: number, approved: boolean) => api.put(`/remediation-actions/${id}/approve`, { approved, approved_by: 'admin' });
+export const executeRemediationAction = (id: number) => api.post(`/remediation-actions/${id}/execute`);
 
 export default api;

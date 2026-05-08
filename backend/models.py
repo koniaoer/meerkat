@@ -59,3 +59,20 @@ class NotificationChannel(Base):
     config = Column(Text)  # JSON string with channel-specific config
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class RemediationAction(Base):
+    __tablename__ = "remediation_actions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, index=True)  # Reference to the alert
+    action_type = Column(String)  # shell/http/webhook/script
+    name = Column(String)  # Human-readable name
+    description = Column(String)  # What this action does
+    config = Column(Text)  # JSON string with action-specific config
+    risk_level = Column(String, default="medium")  # low/medium/high
+    status = Column(String, default="pending")  # pending/approved/executing/completed/failed/rejected/timeout
+    result = Column(Text, nullable=True)  # JSON string with execution result
+    auto_approved = Column(Boolean, default=False)
+    approved_by = Column(String, nullable=True)
+    executed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

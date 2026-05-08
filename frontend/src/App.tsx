@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Layout, Menu, Button, Space } from 'antd';
-import { DashboardOutlined, SettingOutlined, HomeOutlined, TranslationOutlined, MessageOutlined, BellOutlined, LogoutOutlined } from '@ant-design/icons';
+import { DashboardOutlined, SettingOutlined, HomeOutlined, TranslationOutlined, MessageOutlined, BellOutlined, LogoutOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ModelConfigPage from './pages/ModelConfig';
 import DingTalkConfigPage from './pages/DingTalkConfig';
@@ -8,8 +8,10 @@ import Overview from './pages/Overview';
 import Login from './pages/Login';
 import AlertDetail from './pages/AlertDetail';
 import NotificationChannels from './pages/NotificationChannels';
+import RemediationActions from './pages/RemediationActions';
 import { LanguageProvider, useLanguage } from './services/i18n';
 import { useEffect, useState } from 'react';
+import { getMe, getAlertStats } from './services/api';
 
 const { Header, Content, Sider } = Layout;
 
@@ -17,26 +19,70 @@ const AppContent = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [requireAuth, setRequireAuth] = useState(false);
 
+  // Check auth on startup
   useEffect(() => {
-    const checkAuth = () => {
-      setIsLoggedIn(!!localStorage.getItem('token'));
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          await getMe();
+          setIsLoggedIn(true);
+        } catch {
+          // Token invalid, check if auth is required
+          localStorage.removeItem('token');
+          setIsLoggedIn(false);
+        }
+      }
+
+      // Check if auth is required by trying a public endpoint
+      if (!token || !isLoggedIn) {
+        try {
+          await getAlertStats();
+          // Public endpoint works → auth not required
+          setRequireAuth(false);
+          setIsLoggedIn(true); // treat as logged in
+        } catch (e: any) {
+          if (e.response?.status === 401) {
+            setRequireAuth(true);
+          } else {
+            // Other error (network, etc.) — don't block
+            setRequireAuth(false);
+            setIsLoggedIn(true);
+          }
+        }
+      }
+      setAuthChecked(true);
     };
-    window.addEventListener('storage', checkAuth);
-    return () => window.removeEventListener('storage', checkAuth);
+    checkAuth();
   }, []);
 
-  // Redirect to login if not logged in (but allow access to /login)
+  // Listen for auth-change events (from Login.tsx, logout, or 401 interceptor)
   useEffect(() => {
-    if (!isLoggedIn && location.pathname !== '/login') {
+    const handleAuthChange = () => {
+      setIsLoggedIn(!!localStorage.getItem('token'));
+    };
+    window.addEventListener('storage', handleAuthChange);
+    window.addEventListener('auth-change', handleAuthChange);
+    return () => {
+      window.removeEventListener('storage', handleAuthChange);
+      window.removeEventListener('auth-change', handleAuthChange);
+    };
+  }, []);
+
+  // Redirect to login only if auth is required and user is not logged in
+  useEffect(() => {
+    if (authChecked && requireAuth && !isLoggedIn && location.pathname !== '/login') {
       navigate('/login');
     }
-  }, [isLoggedIn, location.pathname, navigate]);
+  }, [authChecked, requireAuth, isLoggedIn, location.pathname, navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    setIsLoggedIn(false);
+    window.dispatchEvent(new Event('auth-change'));
     navigate('/login');
   };
 
@@ -57,6 +103,11 @@ const AppContent = () => {
       label: <Link to="/notification-channels">{t('notificationChannels')}</Link>,
     },
     {
+      key: '/remediation-actions',
+      icon: <ThunderboltOutlined />,
+      label: <Link to="/remediation-actions">{t('aiAutoOps')}</Link>,
+    },
+    {
       key: '/config',
       icon: <SettingOutlined />,
       label: <Link to="/config">{t('models')}</Link>,
@@ -68,8 +119,22 @@ const AppContent = () => {
     },
   ];
 
+  // Show loading while checking auth
+  if (!authChecked) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>Loading...</div>;
+  }
+
   // Login page has no layout
   if (location.pathname === '/login') {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+      </Routes>
+    );
+  }
+
+  // Require auth but not logged in → show login
+  if (requireAuth && !isLoggedIn) {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -120,6 +185,7 @@ const AppContent = () => {
               <Route path="/notification-channels" element={<NotificationChannels />} />
               <Route path="/config" element={<ModelConfigPage />} />
               <Route path="/dingtalk" element={<DingTalkConfigPage />} />
+              <Route path="/remediation-actions" element={<RemediationActions />} />
               <Route path="/login" element={<Login />} />
             </Routes>
           </div>

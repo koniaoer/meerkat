@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Descriptions, Tag, Button, Space, Collapse, Typography, Spin } from 'antd';
 import { ArrowLeftOutlined, CheckOutlined, BellOutlined } from '@ant-design/icons';
-import { getAlertById, acknowledgeAlert, silenceAlert } from '../services/api';
+import { getAlertById, acknowledgeAlert, silenceAlert, getRemediationActions, approveRemediationAction, executeRemediationAction } from '../services/api';
 import { useLanguage } from '../services/i18n';
 
 const { Title, Text } = Typography;
@@ -22,6 +22,7 @@ const AlertDetail: React.FC = () => {
   const { t } = useLanguage();
   const [alert, setAlert] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [actions, setActions] = useState<any[]>([]);
 
   const fetchAlert = async () => {
     if (!id) return;
@@ -36,8 +37,19 @@ const AlertDetail: React.FC = () => {
     }
   };
 
+  const fetchActions = async () => {
+    if (!id) return;
+    try {
+      const res = await getRemediationActions({ alert_id: Number(id) });
+      setActions(res.data);
+    } catch (error) {
+      console.error('Failed to fetch actions', error);
+    }
+  };
+
   useEffect(() => {
     fetchAlert();
+    fetchActions();
   }, [id]);
 
   const handleAcknowledge = async () => {
@@ -114,6 +126,55 @@ const AlertDetail: React.FC = () => {
           </Descriptions.Item>
         </Descriptions>
       </Card>
+
+      {/* Remediation Actions Card */}
+      {actions.length > 0 && (
+        <Card title={t('remediationActions')} style={{ marginBottom: 16 }}>
+          {actions.map((action: any) => (
+            <div key={action.id} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Space>
+                <Tag color={
+                  action.status === 'completed' ? 'green' :
+                  action.status === 'failed' ? 'red' :
+                  action.status === 'pending' ? 'orange' :
+                  action.status === 'executing' ? 'cyan' :
+                  'default'
+                }>{action.status?.toUpperCase()}</Tag>
+                <Tag color={action.risk_level === 'low' ? 'green' : action.risk_level === 'high' ? 'red' : 'orange'}>
+                  {action.risk_level?.toUpperCase()}
+                </Tag>
+                <Text strong>{action.name}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>{action.description}</Text>
+              </Space>
+              <Space>
+                {action.status === 'pending' && (
+                  <>
+                    <Button size="small" type="primary" onClick={() => { approveRemediationAction(action.id, true).then(() => { fetchActions(); fetchAlert(); }); }}>
+                      {t('approve')}
+                    </Button>
+                    <Button size="small" danger onClick={() => { approveRemediationAction(action.id, false).then(() => { fetchActions(); }); }}>
+                      {t('reject')}
+                    </Button>
+                  </>
+                )}
+                {['completed', 'failed', 'timeout'].includes(action.status) && (
+                  <Button size="small" onClick={() => { executeRemediationAction(action.id).then(() => { fetchActions(); }); }}>
+                    {t('reExecute')}
+                  </Button>
+                )}
+                {action.result && (
+                  <details style={{ fontSize: 12 }}>
+                    <summary>{t('result')}</summary>
+                    <pre style={{ maxHeight: 150, overflow: 'auto', background: '#f5f5f5', padding: 8, marginTop: 4 }}>
+                      {(() => { try { return JSON.stringify(JSON.parse(action.result), null, 2); } catch { return action.result; } })()}
+                    </pre>
+                  </details>
+                )}
+              </Space>
+            </div>
+          ))}
+        </Card>
+      )}
 
       {/* Actions Card */}
       <Card title={t('actions')} style={{ marginBottom: 16 }}>

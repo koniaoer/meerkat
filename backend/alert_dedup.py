@@ -59,6 +59,10 @@ class AlertDeduplicator:
         self._cache.move_to_end(fingerprint)
         logger.info("Cached AI analysis for fingerprint: %s", fingerprint)
     
+    def clear(self):
+        """Clear all cache entries"""
+        self._cache.clear()
+
     def clear_expired(self):
         """Remove expired entries from cache"""
         now = time.time()

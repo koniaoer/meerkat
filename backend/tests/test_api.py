@@ -6,48 +6,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, StaticPool
-from sqlalchemy.orm import sessionmaker
 
-import models
-from database import Base, get_db
 from main import app
+from tests.conftest import test_engine, TestSessionLocal
+from database import Base
 
-# 内存测试数据库 — StaticPool 保证所有连接共享同一个内存库
-TEST_DB_URL = "sqlite:///:memory:"
-test_engine = create_engine(
-    TEST_DB_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-
-# 建表
-Base.metadata.create_all(bind=test_engine)
-
-
-def override_get_db():
-    db = TestSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
+client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def clean_tables():
-    """每个测试前清空数据"""
+    """每个API测试前清空所有表数据"""
     with test_engine.connect() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(table.delete())
         conn.commit()
     yield
-
-
-client = TestClient(app)
 
 
 class TestHealthEndpoint:
@@ -72,6 +46,14 @@ class TestModelConfigAPI:
         assert len(response.json()) == 1
 
     def test_get_active_config_not_found(self):
+        # Create an inactive config to ensure no active config exists
+        client.post("/api/v1/model-configs", json={
+            "provider_name": "Inactive",
+            "api_key": "sk-inactive",
+            "base_url": "https://inactive.example.com",
+            "model_name": "inactive-model",
+            "is_active": False,
+        })
         response = client.get("/api/v1/model-configs/active")
         assert response.status_code == 404
 
@@ -141,7 +123,7 @@ class TestAlertAPI:
         }
 
         with patch("main.ai_service.analyze_alert_with_ai", new_callable=AsyncMock) as mock_ai:
-            mock_ai.return_value = {"summary": "Test analysis", "root_cause": "", "suggestion": "", "severity": "low"}
+            mock_ai.return_value = {"summary": "Test analysis", "root_cause": "", "suggestion": "", "severity": "low", "actions": []}
             with patch("main.dingtalk_service.send_dingtalk_notification", new_callable=AsyncMock):
                 response = client.post("/api/v1/alerts", json=webhook_payload)
 

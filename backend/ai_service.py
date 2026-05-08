@@ -9,7 +9,7 @@ from logger import logger
 async def analyze_alert_with_ai(alert_data: dict, config: ModelConfig) -> dict:
     if not config:
         logger.warning("No active AI model configuration found for alert analysis")
-        return {"summary": "No active AI model configuration found.", "root_cause": "", "suggestion": "", "severity": "low"}
+        return {"summary": "No active AI model configuration found.", "root_cause": "", "suggestion": "", "severity": "low", "actions": []}
     
     client = AsyncOpenAI(
         api_key=config.api_key,
@@ -17,18 +17,39 @@ async def analyze_alert_with_ai(alert_data: dict, config: ModelConfig) -> dict:
     )
     
     prompt = f"""
-    You are an expert SRE and DevOps engineer. Analyze the following Prometheus alert and return your analysis STRICTLY as a JSON object with exactly these four fields:
+You are an expert SRE and DevOps engineer. Analyze the following Prometheus alert and return your analysis STRICTLY as a JSON object with these fields:
 
-    - "summary": A concise summary of what's happening (string)
-    - "root_cause": Potential root cause analysis (string)
-    - "suggestion": Recommended troubleshooting and fix steps (string)
-    - "severity": Severity level, must be one of: low, medium, high, critical (string)
+- "summary": A concise summary of what's happening (string)
+- "root_cause": Potential root cause analysis (string)
+- "suggestion": Recommended troubleshooting steps (string)
+- "severity": Severity level, must be one of: low, medium, high, critical (string)
+- "actions": A list of remediation actions that can be automatically executed. Each action must have:
+  - "action_type": one of "shell", "http", "webhook", "script"
+  - "name": short human-readable name (e.g., "Restart nginx", "Check disk usage", "Scale up pods")
+  - "description": what this action does and why
+  - "config": JSON object with action-specific parameters:
+    - For shell: {{"command": "the shell command to run"}}
+    - For http: {{"url": "http://...", "method": "POST", "headers": {{}}, "body": {{}}}}
+    - For webhook: {{"url": "http://...", "payload": {{}}}}
+    - For script: {{"name": "script_name", "args": []}}
+  - "risk_level": one of "low", "medium", "high"
+    - low: read-only, check status (e.g., df -h, systemctl status, kubectl get pods)
+    - medium: restart service, scale up (e.g., systemctl restart nginx, kubectl scale deployment)
+    - high: delete data, modify critical config, restart entire server
 
-    IMPORTANT: Return ONLY the JSON object, no markdown, no code fences, no extra text.
+IMPORTANT RULES for actions:
+- Always include at least one low-risk diagnostic action (e.g., check service status, check disk, check logs)
+- Only suggest medium/high risk actions if you're confident they'll help
+- Never suggest destructive actions (rm -rf, drop database) as automated actions
+- For Kubernetes: use kubectl commands
+- For systemd services: use systemctl commands
+- Keep commands simple and safe
 
-    Alert Data:
-    {json.dumps(alert_data, indent=2)}
-    """
+IMPORTANT: Return ONLY the JSON object, no markdown, no code fences, no extra text.
+
+Alert Data:
+{json.dumps(alert_data, indent=2)}
+"""
     
     try:
         response = await client.chat.completions.create(
@@ -54,10 +75,10 @@ async def analyze_alert_with_ai(alert_data: dict, config: ModelConfig) -> dict:
                     result = json.loads(json_match.group(1).strip())
                 except json.JSONDecodeError:
                     # Fallback: return raw text in summary
-                    return {"summary": content, "root_cause": "", "suggestion": "", "severity": "low"}
+                    return {"summary": content, "root_cause": "", "suggestion": "", "severity": "low", "actions": []}
             else:
                 # Fallback: return raw text in summary
-                return {"summary": content, "root_cause": "", "suggestion": "", "severity": "low"}
+                return {"summary": content, "root_cause": "", "suggestion": "", "severity": "low", "actions": []}
         
         # Validate and normalize the result
         default = {"summary": "", "root_cause": "", "suggestion": "", "severity": "low"}
@@ -66,6 +87,23 @@ async def analyze_alert_with_ai(alert_data: dict, config: ModelConfig) -> dict:
                 result[key] = default[key]
             elif key == "severity" and result[key] not in ("low", "medium", "high", "critical"):
                 result[key] = "low"
+        
+        # Validate actions
+        if "actions" not in result or not isinstance(result["actions"], list):
+            result["actions"] = []
+        else:
+            # Validate each action
+            valid_actions = []
+            for action in result["actions"]:
+                if isinstance(action, dict) and "action_type" in action and "name" in action:
+                    if "config" not in action or not isinstance(action["config"], dict):
+                        action["config"] = {}
+                    if "risk_level" not in action or action["risk_level"] not in ("low", "medium", "high"):
+                        action["risk_level"] = "medium"
+                    if "description" not in action:
+                        action["description"] = action["name"]
+                    valid_actions.append(action)
+            result["actions"] = valid_actions
         
         return result
     except Exception as e:
@@ -82,4 +120,4 @@ async def analyze_alert_with_ai(alert_data: dict, config: ModelConfig) -> dict:
         else:
             hint = f"AI 分析失败: {error_msg}"
         
-        return {"summary": hint, "root_cause": "", "suggestion": "", "severity": "low"}
+        return {"summary": hint, "root_cause": "", "suggestion": "", "severity": "low", "actions": []}

@@ -14,6 +14,7 @@ from auth import (
 from notification.manager import notification_manager
 from database import engine, get_db
 from logger import logger
+from action_executor import execute_action, AUTO_APPROVE_LOW_RISK
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -373,6 +374,39 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
         db_alert = crud.create_alert(db, alert_create, analysis_result=json.dumps(analysis, ensure_ascii=False), analysis=analysis)
         results.append(db_alert)
 
+        # Create remediation actions from AI suggestions
+        if isinstance(analysis, dict) and "actions" in analysis:
+            for action_data in analysis["actions"]:
+                action_create = schemas.RemediationActionCreate(
+                    alert_id=db_alert.id,
+                    action_type=action_data.get("action_type", "shell"),
+                    name=action_data.get("name", "Unnamed action"),
+                    description=action_data.get("description", ""),
+                    config=json.dumps(action_data.get("config", {}), ensure_ascii=False),
+                    risk_level=action_data.get("risk_level", "medium"),
+                )
+                is_low_risk = action_data.get("risk_level") == "low"
+                auto_approve = AUTO_APPROVE_LOW_RISK and is_low_risk
+                created_action = crud.create_remediation_action(db, action_create, auto_approved=auto_approve)
+
+                # Auto-execute low-risk actions if configured
+                if auto_approve:
+                    logger.info("Auto-executing low-risk action: %s (id=%d)", created_action.name, created_action.id)
+                    try:
+                        config_dict = action_data.get("config", {})
+                        crud.update_action_status(db, created_action.id, "executing")
+                        result = await execute_action(created_action.action_type, config_dict)
+                        crud.update_action_status(
+                            db, created_action.id,
+                            "completed" if result["success"] else "failed",
+                            result=json.dumps(result, ensure_ascii=False)
+                        )
+                    except Exception as e:
+                        crud.update_action_status(
+                            db, created_action.id, "failed",
+                            result=json.dumps({"success": False, "output": str(e)})
+                        )
+
         # Send notifications via NotificationManager or legacy DingTalk
         if should_notify:
             if channel_list:
@@ -435,6 +469,94 @@ def silence_alert(alert_id: int, duration_minutes: int = Query(120, description=
         raise HTTPException(status_code=404, detail="Alert not found")
     logger.info("Alert %d silenced for %d minutes", alert_id, duration_minutes)
     return result
+
+
+# ─── Remediation Action Endpoints ─────────────────────────────────────────────
+@app.get("/api/v1/remediation-actions", response_model=List[schemas.RemediationActionResponse])
+def list_remediation_actions(
+    alert_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    """List remediation actions, optionally filtered by alert_id or status"""
+    return crud.get_remediation_actions(db, alert_id=alert_id, status=status, skip=skip, limit=limit)
+
+
+@app.get("/api/v1/remediation-actions/{action_id}", response_model=schemas.RemediationActionResponse)
+def get_remediation_action(action_id: int, db: Session = Depends(get_db)):
+    """Get a single remediation action"""
+    action = crud.get_remediation_action(db, action_id)
+    if not action:
+        raise HTTPException(status_code=404, detail="Action not found")
+    return action
+
+
+@app.put("/api/v1/remediation-actions/{action_id}/approve")
+async def approve_remediation_action(
+    action_id: int,
+    approval: schemas.ActionApproval,
+    db: Session = Depends(get_db),
+):
+    """Approve or reject a remediation action"""
+    db_action = crud.get_remediation_action(db, action_id)
+    if not db_action:
+        raise HTTPException(status_code=404, detail="Action not found")
+
+    if db_action.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Action is {db_action.status}, cannot approve")
+
+    if approval.approved:
+        # Approve and execute
+        crud.update_action_status(db, action_id, "approved", approved_by=approval.approved_by)
+
+        # Execute the action
+        config_dict = json.loads(db_action.config) if isinstance(db_action.config, str) else db_action.config
+        crud.update_action_status(db, action_id, "executing")
+
+        try:
+            result = await execute_action(db_action.action_type, config_dict)
+            crud.update_action_status(
+                db, action_id,
+                "completed" if result["success"] else "failed",
+                result=json.dumps(result, ensure_ascii=False)
+            )
+        except Exception as e:
+            crud.update_action_status(db, action_id, "failed", result=json.dumps({"success": False, "output": str(e)}))
+
+        # Refresh and return
+        db_action = crud.get_remediation_action(db, action_id)
+        return db_action
+    else:
+        crud.update_action_status(db, action_id, "rejected", approved_by=approval.approved_by)
+        return crud.get_remediation_action(db, action_id)
+
+
+@app.post("/api/v1/remediation-actions/{action_id}/execute")
+async def execute_remediation_action(action_id: int, db: Session = Depends(get_db)):
+    """Re-execute a completed or failed action"""
+    db_action = crud.get_remediation_action(db, action_id)
+    if not db_action:
+        raise HTTPException(status_code=404, detail="Action not found")
+
+    if db_action.status not in ("approved", "completed", "failed", "timeout"):
+        raise HTTPException(status_code=400, detail=f"Action is {db_action.status}, cannot execute")
+
+    config_dict = json.loads(db_action.config) if isinstance(db_action.config, str) else db_action.config
+    crud.update_action_status(db, action_id, "executing")
+
+    try:
+        result = await execute_action(db_action.action_type, config_dict)
+        crud.update_action_status(
+            db, action_id,
+            "completed" if result["success"] else "failed",
+            result=json.dumps(result, ensure_ascii=False)
+        )
+    except Exception as e:
+        crud.update_action_status(db, action_id, "failed", result=json.dumps({"success": False, "output": str(e)}))
+
+    return crud.get_remediation_action(db, action_id)
 
 
 if __name__ == "__main__":

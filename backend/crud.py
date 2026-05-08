@@ -207,3 +207,42 @@ def delete_dingtalk_config(db: Session, config_id: int):
 
 def get_active_dingtalk_config(db: Session):
     return db.query(models.DingTalkConfig).filter(models.DingTalkConfig.is_active == True).first()
+
+# RemediationAction CRUD
+def create_remediation_action(db: Session, action: schemas.RemediationActionCreate, auto_approved: bool = False):
+    db_action = models.RemediationAction(
+        **action.model_dump(),
+        status="approved" if auto_approved else "pending",
+        auto_approved=auto_approved,
+    )
+    db.add(db_action)
+    db.commit()
+    db.refresh(db_action)
+    logger.info("Created remediation action: id=%d, type=%s, name=%s", db_action.id, action.action_type, action.name)
+    return db_action
+
+def get_remediation_actions(db: Session, alert_id: int = None, status: str = None, skip: int = 0, limit: int = 100):
+    query = db.query(models.RemediationAction)
+    if alert_id:
+        query = query.filter(models.RemediationAction.alert_id == alert_id)
+    if status:
+        query = query.filter(models.RemediationAction.status == status)
+    return query.order_by(models.RemediationAction.created_at.desc()).offset(skip).limit(limit).all()
+
+def get_remediation_action(db: Session, action_id: int):
+    return db.query(models.RemediationAction).filter(models.RemediationAction.id == action_id).first()
+
+def update_action_status(db: Session, action_id: int, status: str, result: str = None, approved_by: str = None):
+    db_action = get_remediation_action(db, action_id)
+    if not db_action:
+        return None
+    db_action.status = status
+    if result is not None:
+        db_action.result = result
+    if approved_by is not None:
+        db_action.approved_by = approved_by
+    if status == "executing":
+        db_action.executed_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_action)
+    return db_action

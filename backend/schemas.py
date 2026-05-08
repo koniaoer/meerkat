@@ -134,3 +134,34 @@ class NotificationChannelResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Remediation Action schemas
+class RemediationActionCreate(BaseModel):
+    alert_id: int
+    action_type: str  # shell/http/webhook/script
+    name: str
+    description: str
+    config: str  # JSON string
+    risk_level: str = "medium"
+
+class RemediationActionResponse(BaseModel):
+    id: int
+    alert_id: int
+    action_type: str
+    name: str
+    description: str
+    config: str
+    risk_level: str
+    status: str
+    result: Optional[str] = None
+    auto_approved: bool = False
+    approved_by: Optional[str] = None
+    executed_at: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ActionApproval(BaseModel):
+    approved: bool  # True=approve, False=reject
+    approved_by: str = "admin"

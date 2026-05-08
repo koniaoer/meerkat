@@ -26,6 +26,7 @@ const Login: React.FC = () => {
         const res = await login(values);
         const { access_token } = res.data;
         localStorage.setItem('token', access_token);
+        window.dispatchEvent(new Event('auth-change'));
         message.success(t('loginSuccess'));
         navigate('/');
       }
