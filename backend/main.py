@@ -10,6 +10,7 @@ import models, schemas, crud, ai_service
 from alert_dedup import alert_dedup, ai_rate_limiter
 from alert_router import route_alert
 from alert_suppressor import should_suppress
+from escalation_engine import match_escalation_policy, run_escalation_check
 from auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, require_auth, encrypt_value, decrypt_value,
@@ -67,7 +68,45 @@ async def lifespan(app):
                 logger.info("Migrated %d DingTalk configs to notification channels", len(legacy_configs))
         except Exception as e:
             logger.warning("DingTalk migration skipped: %s", e)
+
+    # ─── Background escalation checker ────────────────────────────────────
+    import asyncio
+
+    async def escalation_loop():
+        while True:
+            try:
+                await asyncio.sleep(30)  # Check every 30 seconds
+                db_gen = get_db()
+                db = next(db_gen)
+                try:
+                    def get_channels_by_ids(channel_ids):
+                        return [channel_map[cid] for cid in channel_ids if cid in channel_map]
+                    # Rebuild channel_map from DB
+                    active_channels = crud.get_active_notification_channels(db)
+                    global channel_map
+                    channel_map = {}
+                    for ch in active_channels:
+                        config_dict = json.loads(ch.config) if isinstance(ch.config, str) else ch.config
+                        sensitive_keys = ["api_key", "secret", "password", "smtp_password"]
+                        for key in sensitive_keys:
+                            if key in config_dict:
+                                config_dict[key] = decrypt_value(str(config_dict[key]))
+                        channel_map[ch.id] = {"channel_type": ch.channel_type, "name": ch.name, "config": config_dict}
+                    await run_escalation_check(db, notification_manager, get_channels_by_ids)
+                except Exception as e:
+                    logger.error("Escalation check error: %s", e)
+                finally:
+                    try:
+                        next(db_gen)
+                    except StopIteration:
+                        pass
+            except asyncio.CancelledError:
+                break
+
+    task = asyncio.create_task(escalation_loop())
     yield
+    task.cancel()
+    # ─── End background task ───────────────────────────────────────────────
 
 app = FastAPI(title="Meerkat AI Bot API", lifespan=lifespan)
 
@@ -549,7 +588,24 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
             # ─── End routing ──────────────────────────────────────────
 
             if channel_list:
-                await notification_manager.dispatch(alert.model_dump(), analysis, channel_list)
+                # Add on-call user info to notification context
+                oncall_user = crud.get_current_oncall_user(db)
+                oncall_info = ""
+                if oncall_user:
+                    oncall_info = f"\n\n👤 当前值班: {oncall_user.display_name or oncall_user.username}"
+                    analysis_with_oncall = dict(analysis) if isinstance(analysis, dict) else {"summary": str(analysis)}
+                    analysis_with_oncall["oncall"] = oncall_info
+                else:
+                    analysis_with_oncall = analysis
+                await notification_manager.dispatch(alert.model_dump(), analysis_with_oncall, channel_list)
+
+            # ─── Escalation: create event if policy matches ──────────────
+            escalation_policies = crud.get_active_escalation_policies(db)
+            matched_policy = match_escalation_policy(alert.labels, alert.labels.get("severity", "info"), escalation_policies)
+            if matched_policy and alert_status == "firing":
+                crud.create_escalation_event(db, alert_id=db_alert.id, policy_id=matched_policy.id)
+                logger.info("Created escalation event for alert %d (policy: %s)", db_alert.id, matched_policy.name)
+            # ─── End escalation ───────────────────────────────────────────
 
     logger.info("Processed %d alerts from webhook", len(results))
     return {"status": "success", "processed": len(results)}
@@ -593,6 +649,10 @@ def acknowledge_alert(alert_id: int, db: Session = Depends(get_db), _user: model
         raise HTTPException(status_code=404, detail="Alert not found")
     crud.create_audit_log(db, username=_user.username, user_id=_user.id,
                           action="alert.acknowledge", resource_type="alert", resource_id=alert_id)
+    # Stop escalation for this alert
+    for ev in crud.get_active_escalation_events(db):
+        if ev.alert_id == alert_id:
+            crud.update_escalation_event(db, ev.id, status="acknowledged")
     logger.info("Alert %d acknowledged", alert_id)
     return result
 
@@ -769,6 +829,80 @@ def list_audit_logs(
     db: Session = Depends(get_db), _user: models.User = Depends(require_role("admin")),
 ):
     return crud.get_audit_logs(db, skip=skip, limit=limit, action=action, resource_type=resource_type)
+
+# ─── On-Call Schedule Endpoints ────────────────────────────────────────────
+@app.get("/api/v1/oncall-schedules", response_model=List[schemas.OnCallScheduleResponse])
+def list_oncall_schedules(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    return crud.get_oncall_schedules(db)
+
+@app.post("/api/v1/oncall-schedules", response_model=schemas.OnCallScheduleResponse)
+def create_oncall_schedule(schedule: schemas.OnCallScheduleCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.create_oncall_schedule(db, schedule)
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="oncall.create", resource_type="oncall_schedule", resource_id=result.get("id", result.id),
+                          detail=json.dumps({"name": schedule.name}, ensure_ascii=False))
+    return result
+
+@app.put("/api/v1/oncall-schedules/{schedule_id}", response_model=schemas.OnCallScheduleResponse)
+def update_oncall_schedule(schedule_id: int, schedule: schemas.OnCallScheduleCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.update_oncall_schedule(db, schedule_id, schedule)
+    if not result:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="oncall.update", resource_type="oncall_schedule", resource_id=schedule_id)
+    return result
+
+@app.delete("/api/v1/oncall-schedules/{schedule_id}")
+def delete_oncall_schedule(schedule_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.delete_oncall_schedule(db, schedule_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="oncall.delete", resource_type="oncall_schedule", resource_id=schedule_id)
+    return {"status": "deleted"}
+
+@app.get("/api/v1/oncall-current")
+def get_current_oncall(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    user = crud.get_current_oncall_user(db)
+    if user:
+        return {"user_id": user.id, "username": user.username, "display_name": user.display_name}
+    return {"user_id": None, "username": None, "display_name": None}
+
+# ─── Escalation Policy Endpoints ───────────────────────────────────────────
+@app.get("/api/v1/escalation-policies", response_model=List[schemas.EscalationPolicyResponse])
+def list_escalation_policies(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    return crud.get_escalation_policies(db)
+
+@app.post("/api/v1/escalation-policies", response_model=schemas.EscalationPolicyResponse)
+def create_escalation_policy(policy: schemas.EscalationPolicyCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.create_escalation_policy(db, policy)
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="escalation.create", resource_type="escalation_policy", resource_id=result.id,
+                          detail=json.dumps({"name": policy.name}, ensure_ascii=False))
+    return result
+
+@app.put("/api/v1/escalation-policies/{policy_id}", response_model=schemas.EscalationPolicyResponse)
+def update_escalation_policy(policy_id: int, policy: schemas.EscalationPolicyCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.update_escalation_policy(db, policy_id, policy)
+    if not result:
+        raise HTTPException(status_code=404, detail="Escalation policy not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="escalation.update", resource_type="escalation_policy", resource_id=policy_id)
+    return result
+
+@app.delete("/api/v1/escalation-policies/{policy_id}")
+def delete_escalation_policy(policy_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.delete_escalation_policy(db, policy_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Escalation policy not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="escalation.delete", resource_type="escalation_policy", resource_id=policy_id)
+    return {"status": "deleted"}
+
+# ─── Escalation Event Endpoints ────────────────────────────────────────────
+@app.get("/api/v1/escalation-events", response_model=List[schemas.EscalationEventResponse])
+def list_escalation_events(status: Optional[str] = Query(None), db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    return crud.get_escalation_events(db, status=status)
 
 
 if __name__ == "__main__":

@@ -329,3 +329,134 @@ def get_audit_logs(db: Session, skip: int = 0, limit: int = 100,
     if resource_type:
         query = query.filter(models.AuditLog.resource_type == resource_type)
     return query.order_by(models.AuditLog.created_at.desc()).offset(skip).limit(limit).all()
+
+# ─── On-Call Schedule ──────────────────────────────────────────────────────
+
+def get_oncall_schedules(db: Session):
+    schedules = db.query(models.OnCallSchedule).all()
+    result = []
+    for s in schedules:
+        shifts = db.query(models.OnCallShift).filter(models.OnCallShift.schedule_id == s.id).all()
+        s_dict = {c.name: getattr(s, c.name) for c in s.__table__.columns}
+        s_dict['shifts'] = shifts
+        result.append(s_dict)
+    return result
+
+def create_oncall_schedule(db: Session, data: schemas.OnCallScheduleCreate):
+    db_schedule = models.OnCallSchedule(
+        name=data.name, description=data.description,
+        rotation_type=data.rotation_type, is_active=data.is_active,
+    )
+    db.add(db_schedule)
+    db.commit()
+    db.refresh(db_schedule)
+    for shift in data.shifts:
+        db_shift = models.OnCallShift(
+            schedule_id=db_schedule.id, user_id=shift.user_id,
+            start_time=shift.start_time, end_time=shift.end_time,
+        )
+        db.add(db_shift)
+    db.commit()
+    db.refresh(db_schedule)
+    return get_oncall_schedules(db)[0] if get_oncall_schedules(db) else db_schedule
+
+def update_oncall_schedule(db: Session, schedule_id: int, data: schemas.OnCallScheduleCreate):
+    db_schedule = db.query(models.OnCallSchedule).filter(models.OnCallSchedule.id == schedule_id).first()
+    if not db_schedule:
+        return None
+    db_schedule.name = data.name
+    db_schedule.description = data.description
+    db_schedule.rotation_type = data.rotation_type
+    db_schedule.is_active = data.is_active
+    # Replace shifts
+    db.query(models.OnCallShift).filter(models.OnCallShift.schedule_id == schedule_id).delete()
+    for shift in data.shifts:
+        db_shift = models.OnCallShift(
+            schedule_id=schedule_id, user_id=shift.user_id,
+            start_time=shift.start_time, end_time=shift.end_time,
+        )
+        db.add(db_shift)
+    db.commit()
+    schedules = get_oncall_schedules(db)
+    return next((s for s in schedules if s['id'] == schedule_id), None)
+
+def delete_oncall_schedule(db: Session, schedule_id: int):
+    db_schedule = db.query(models.OnCallSchedule).filter(models.OnCallSchedule.id == schedule_id).first()
+    if not db_schedule:
+        return None
+    db.query(models.OnCallShift).filter(models.OnCallShift.schedule_id == schedule_id).delete()
+    db.delete(db_schedule)
+    db.commit()
+    return db_schedule
+
+def get_current_oncall_user(db: Session):
+    """Get the user who is currently on call."""
+    now = datetime.utcnow()
+    shift = db.query(models.OnCallShift).filter(
+        models.OnCallShift.start_time <= now,
+        models.OnCallShift.end_time >= now,
+    ).first()
+    if not shift:
+        return None
+    return db.query(models.User).filter(models.User.id == shift.user_id).first()
+
+# ─── Escalation Policy ─────────────────────────────────────────────────────
+
+def get_escalation_policies(db: Session):
+    return db.query(models.EscalationPolicy).all()
+
+def create_escalation_policy(db: Session, data: schemas.EscalationPolicyCreate):
+    db_policy = models.EscalationPolicy(**data.model_dump())
+    db.add(db_policy)
+    db.commit()
+    db.refresh(db_policy)
+    return db_policy
+
+def update_escalation_policy(db: Session, policy_id: int, data: schemas.EscalationPolicyCreate):
+    db_policy = db.query(models.EscalationPolicy).filter(models.EscalationPolicy.id == policy_id).first()
+    if not db_policy:
+        return None
+    for k, v in data.model_dump().items():
+        setattr(db_policy, k, v)
+    db.commit()
+    db.refresh(db_policy)
+    return db_policy
+
+def delete_escalation_policy(db: Session, policy_id: int):
+    db_policy = db.query(models.EscalationPolicy).filter(models.EscalationPolicy.id == policy_id).first()
+    if not db_policy:
+        return None
+    db.delete(db_policy)
+    db.commit()
+    return db_policy
+
+def get_active_escalation_policies(db: Session):
+    return db.query(models.EscalationPolicy).filter(models.EscalationPolicy.is_active == True).all()
+
+# ─── Escalation Event ──────────────────────────────────────────────────────
+
+def create_escalation_event(db: Session, alert_id: int, policy_id: int = None):
+    db_event = models.EscalationEvent(alert_id=alert_id, policy_id=policy_id)
+    db.add(db_event)
+    db.commit()
+    db.refresh(db_event)
+    return db_event
+
+def get_escalation_events(db: Session, status: str = None):
+    query = db.query(models.EscalationEvent)
+    if status:
+        query = query.filter(models.EscalationEvent.status == status)
+    return query.order_by(models.EscalationEvent.created_at.desc()).all()
+
+def update_escalation_event(db: Session, event_id: int, **kwargs):
+    db_event = db.query(models.EscalationEvent).filter(models.EscalationEvent.id == event_id).first()
+    if not db_event:
+        return None
+    for k, v in kwargs.items():
+        setattr(db_event, k, v)
+    db.commit()
+    db.refresh(db_event)
+    return db_event
+
+def get_active_escalation_events(db: Session):
+    return db.query(models.EscalationEvent).filter(models.EscalationEvent.status == "active").all()

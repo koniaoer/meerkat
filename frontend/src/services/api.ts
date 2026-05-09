@@ -84,4 +84,18 @@ export const deleteSuppressionRule = (id: number) => api.delete(`/suppression-ru
 // Audit Logs
 export const getAuditLogs = (params?: any) => api.get('/audit-logs', { params });
 
+// On-Call Schedules
+export const getOnCallSchedules = () => api.get('/oncall-schedules');
+export const createOnCallSchedule = (data: any) => api.post('/oncall-schedules', data);
+export const updateOnCallSchedule = (id: number, data: any) => api.put(`/oncall-schedules/${id}`, data);
+export const deleteOnCallSchedule = (id: number) => api.delete(`/oncall-schedules/${id}`);
+export const getCurrentOnCall = () => api.get('/oncall-current');
+
+// Escalation Policies
+export const getEscalationPolicies = () => api.get('/escalation-policies');
+export const createEscalationPolicy = (data: any) => api.post('/escalation-policies', data);
+export const updateEscalationPolicy = (id: number, data: any) => api.put(`/escalation-policies/${id}`, data);
+export const deleteEscalationPolicy = (id: number) => api.delete(`/escalation-policies/${id}`);
+export const getEscalationEvents = (params?: any) => api.get('/escalation-events', { params });
+
 export default api;

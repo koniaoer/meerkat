@@ -131,3 +131,43 @@ class AuditLog(Base):
     detail = Column(Text, nullable=True)
     ip_address = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class OnCallSchedule(Base):
+    __tablename__ = "oncall_schedules"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    description = Column(String, nullable=True)
+    rotation_type = Column(String, default="daily")  # daily/weekly/custom
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class OnCallShift(Base):
+    __tablename__ = "oncall_shifts"
+    id = Column(Integer, primary_key=True, index=True)
+    schedule_id = Column(Integer, index=True)
+    user_id = Column(Integer, index=True)
+    start_time = Column(DateTime)
+    end_time = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class EscalationPolicy(Base):
+    __tablename__ = "escalation_policies"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    description = Column(String, nullable=True)
+    rules = Column(Text, default="[]")  # JSON: [{"level":1,"wait_minutes":5,"channel_ids":[1],"user_ids":[1]}]
+    match_labels = Column(Text, default="{}")
+    match_severity = Column(String, nullable=True)
+    repeat_interval_minutes = Column(Integer, default=0)  # 0=no repeat
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class EscalationEvent(Base):
+    __tablename__ = "escalation_events"
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, index=True)
+    policy_id = Column(Integer, nullable=True)
+    current_level = Column(Integer, default=0)
+    last_escalated_at = Column(DateTime, nullable=True)
+    status = Column(String, default="active")  # active/acknowledged/resolved/expired
+    created_at = Column(DateTime, default=datetime.utcnow)

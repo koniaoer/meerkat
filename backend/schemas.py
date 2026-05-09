@@ -236,3 +236,77 @@ class AuditLogResponse(BaseModel):
     created_at: datetime
     class Config:
         from_attributes = True
+
+# ─── On-Call Schedule ──────────────────────────────────────────────────────
+class OnCallShiftCreate(BaseModel):
+    user_id: int
+    start_time: datetime
+    end_time: datetime
+
+class OnCallShiftResponse(BaseModel):
+    id: int
+    schedule_id: int
+    user_id: int
+    start_time: datetime
+    end_time: datetime
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class OnCallScheduleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    rotation_type: str = "daily"
+    is_active: bool = True
+    shifts: List[OnCallShiftCreate] = []
+
+class OnCallScheduleResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    rotation_type: str
+    is_active: bool
+    shifts: List[OnCallShiftResponse] = []
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── Escalation Policy ─────────────────────────────────────────────────────
+class EscalationLevelRule(BaseModel):
+    level: int
+    wait_minutes: int
+    channel_ids: List[int] = []
+    user_ids: List[int] = []
+
+class EscalationPolicyCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    rules: str = "[]"  # JSON array of EscalationLevelRule
+    match_labels: str = "{}"
+    match_severity: Optional[str] = None
+    repeat_interval_minutes: int = 0
+    is_active: bool = True
+
+class EscalationPolicyResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    rules: str
+    match_labels: str
+    match_severity: Optional[str] = None
+    repeat_interval_minutes: int
+    is_active: bool
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class EscalationEventResponse(BaseModel):
+    id: int
+    alert_id: int
+    policy_id: Optional[int] = None
+    current_level: int
+    last_escalated_at: Optional[datetime] = None
+    status: str
+    created_at: datetime
+    class Config:
+        from_attributes = True
