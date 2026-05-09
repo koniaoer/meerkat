@@ -1,5 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Layout, Menu, Button, Space } from 'antd';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { Layout, Menu, Button, Space, Spin } from 'antd';
 import { DashboardOutlined, SettingOutlined, HomeOutlined, TranslationOutlined, MessageOutlined, BellOutlined, LogoutOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ModelConfigPage from './pages/ModelConfig';
@@ -10,18 +10,24 @@ import AlertDetail from './pages/AlertDetail';
 import NotificationChannels from './pages/NotificationChannels';
 import RemediationActions from './pages/RemediationActions';
 import { LanguageProvider, useLanguage } from './services/i18n';
-import { useEffect, useState } from 'react';
-import { getMe, getAlertStats } from './services/api';
+import { useEffect, useState, ReactNode } from 'react';
+import { getMe } from './services/api';
 
 const { Header, Content, Sider } = Layout;
+
+/** Auth state machine:
+ *  - 'checking' : still validating token on startup
+ *  - 'authenticated' : valid token, show main app
+ *  - 'no_auth' : no users in DB yet (first-time setup), show app without login
+ *  - 'unauthenticated' : users exist but no valid token, force login
+ */
+type AuthState = 'checking' | 'authenticated' | 'no_auth' | 'unauthenticated';
 
 const AppContent = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [requireAuth, setRequireAuth] = useState(false);
+  const [authState, setAuthState] = useState<AuthState>('checking');
 
   // Check auth on startup
   useEffect(() => {
@@ -30,40 +36,47 @@ const AppContent = () => {
       if (token) {
         try {
           await getMe();
-          setIsLoggedIn(true);
-        } catch {
-          // Token invalid, check if auth is required
+          setAuthState('authenticated');
+          return;
+        } catch (e: any) {
+          // Token invalid or expired
           localStorage.removeItem('token');
-          setIsLoggedIn(false);
         }
       }
 
-      // Check if auth is required by trying a public endpoint
-      if (!token || !isLoggedIn) {
-        try {
-          await getAlertStats();
-          // Public endpoint works → auth not required
-          setRequireAuth(false);
-          setIsLoggedIn(true); // treat as logged in
-        } catch (e: any) {
-          if (e.response?.status === 401) {
-            setRequireAuth(true);
-          } else {
-            // Other error (network, etc.) — don't block
-            setRequireAuth(false);
-            setIsLoggedIn(true);
-          }
+      // No valid token — try accessing a protected endpoint to determine if auth is required
+      try {
+        await getMe();  // This will 401 if users exist, 200 if no users
+        // Got 200 = no users in DB = first-time setup
+        setAuthState('no_auth');
+      } catch (e: any) {
+        if (e.response?.status === 401) {
+          // Users exist, auth required
+          setAuthState('unauthenticated');
+        } else {
+          // Network error — don't block, assume no auth for now
+          setAuthState('no_auth');
         }
       }
-      setAuthChecked(true);
     };
     checkAuth();
   }, []);
 
-  // Listen for auth-change events (from Login.tsx, logout, or 401 interceptor)
+  // Listen for auth-change events (login, logout, 401 interceptor)
   useEffect(() => {
-    const handleAuthChange = () => {
-      setIsLoggedIn(!!localStorage.getItem('token'));
+    const handleAuthChange = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          await getMe();
+          setAuthState('authenticated');
+        } catch {
+          localStorage.removeItem('token');
+          setAuthState('unauthenticated');
+        }
+      } else {
+        setAuthState('unauthenticated');
+      }
     };
     window.addEventListener('storage', handleAuthChange);
     window.addEventListener('auth-change', handleAuthChange);
@@ -73,17 +86,16 @@ const AppContent = () => {
     };
   }, []);
 
-  // Redirect to login only if auth is required and user is not logged in
+  // Redirect unauthenticated users to login (covers URL bar navigation)
   useEffect(() => {
-    if (authChecked && requireAuth && !isLoggedIn && location.pathname !== '/login') {
-      navigate('/login');
+    if (authState === 'unauthenticated' && location.pathname !== '/login') {
+      navigate('/login', { replace: true });
     }
-  }, [authChecked, requireAuth, isLoggedIn, location.pathname, navigate]);
+  }, [authState, location.pathname, navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     window.dispatchEvent(new Event('auth-change'));
-    navigate('/login');
   };
 
   const menuItems = [
@@ -119,29 +131,31 @@ const AppContent = () => {
     },
   ];
 
-  // Show loading while checking auth
-  if (!authChecked) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>Loading...</div>;
+  // Loading state
+  if (authState === 'checking') {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <Spin size="large" />
+      </div>
+    );
   }
 
-  // Login page has no layout
+  // Login page — always accessible, no layout
   if (location.pathname === '/login') {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
   }
 
-  // Require auth but not logged in → show login
-  if (requireAuth && !isLoggedIn) {
-    return (
-      <Routes>
-        <Route path="/login" element={<Login />} />
-      </Routes>
-    );
+  // Unauthenticated — force login, catch ALL routes
+  if (authState === 'unauthenticated') {
+    return <Navigate to="/login" replace />;
   }
 
+  // Authenticated or no_auth — show main app
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider collapsible>
@@ -165,7 +179,7 @@ const AppContent = () => {
             >
               {language === 'zh' ? 'English' : '中文'}
             </Button>
-            {isLoggedIn && (
+            {authState === 'authenticated' && (
               <Button
                 type="text"
                 icon={<LogoutOutlined />}
@@ -183,10 +197,10 @@ const AppContent = () => {
               <Route path="/alerts" element={<Dashboard />} />
               <Route path="/alerts/:id" element={<AlertDetail />} />
               <Route path="/notification-channels" element={<NotificationChannels />} />
+              <Route path="/remediation-actions" element={<RemediationActions />} />
               <Route path="/config" element={<ModelConfigPage />} />
               <Route path="/dingtalk" element={<DingTalkConfigPage />} />
-              <Route path="/remediation-actions" element={<RemediationActions />} />
-              <Route path="/login" element={<Login />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
         </Content>

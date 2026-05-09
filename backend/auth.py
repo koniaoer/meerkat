@@ -45,43 +45,56 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Optional[models.User]:
-    """Get current user from JWT token. Returns None if no auth is configured (no users in DB)."""
-    if token is None:
-        # No token provided - check if auth is required (users exist)
-        user_count = db.query(models.User).count()
-        if user_count == 0:
-            # No users = first-time setup, no auth required
-            return None
+    """Get current user from JWT token.
+    
+    Behavior:
+    - No users in DB → no auth required, return None (first-time setup)
+    - Users exist + valid token → return user
+    - Users exist + no/invalid token → raise 401
+    """
+    # Check if any users exist
+    user_count = db.query(models.User).count()
+    
+    if user_count == 0:
+        # No users = first-time setup, no auth required
         return None
+    
+    # Users exist → auth is required
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未登录，请先登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="登录已过期，请重新登录",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     username = payload.get("sub")
     if username is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的登录凭证")
     
     user = db.query(models.User).filter(models.User.username == username).first()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
     
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User is inactive")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户已被禁用")
     
     return user
 
 async def require_auth(current_user: models.User = Depends(get_current_user)) -> models.User:
     """Require authentication. If no users exist, allow all (first-time setup)."""
-    # If current_user is None and users exist, reject
     if current_user is None:
+        # This only happens when no users exist in DB (first-time setup)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            detail="未登录，请先登录",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return current_user
@@ -94,7 +107,6 @@ try:
     else:
         _fernet = Fernet(base64.urlsafe_b64encode(secrets.token_bytes(32)))
 except (ValueError, Exception):
-    # ENCRYPTION_KEY is not a valid Fernet key, generate one
     _fernet = Fernet(base64.urlsafe_b64encode(secrets.token_bytes(32)))
 
 def encrypt_value(plain_text: str) -> str:
@@ -110,5 +122,4 @@ def decrypt_value(encrypted_text: str) -> str:
     try:
         return _fernet.decrypt(encrypted_text.encode()).decode()
     except Exception:
-        # If decryption fails, return as-is (might be plaintext from before encryption)
         return encrypted_text
