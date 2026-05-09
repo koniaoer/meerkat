@@ -56,13 +56,6 @@ export const deleteModelConfig = (id: number) => api.delete(`/model-configs/${id
 export const getActiveModelConfig = () => api.get('/model-configs/active');
 export const testModelConfig = (data: any) => api.post('/model-configs/test', data);
 
-// DingTalk Config
-export const getDingTalkConfigs = () => api.get('/dingtalk-configs');
-export const createDingTalkConfig = (data: any) => api.post('/dingtalk-configs', data);
-export const updateDingTalkConfig = (id: number, data: any) => api.put(`/dingtalk-configs/${id}`, data);
-export const deleteDingTalkConfig = (id: number) => api.delete(`/dingtalk-configs/${id}`);
-export const testDingTalkConfig = (data: any) => api.post('/dingtalk-configs/test', data);
-
 // User Management
 export const getUsers = () => api.get('/users');
 export const createUser = (data: any) => api.post('/users', data);

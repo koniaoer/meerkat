@@ -6,7 +6,7 @@ from typing import List, Optional
 from datetime import datetime
 import json
 
-import models, schemas, crud, ai_service, dingtalk_service
+import models, schemas, crud, ai_service
 from alert_dedup import alert_dedup, ai_rate_limiter
 from auth import (
     hash_password, verify_password, create_access_token,
@@ -42,6 +42,29 @@ async def lifespan(app):
                 next(db_gen)
             except StopIteration:
                 pass
+
+        # Migrate legacy DingTalk configs to notification channels
+        try:
+            from models import DingTalkConfig, NotificationChannel
+            legacy_configs = db.query(DingTalkConfig).all()
+            for lc in legacy_configs:
+                existing = db.query(NotificationChannel).filter(NotificationChannel.name == f"DingTalk-{lc.id}").first()
+                if not existing:
+                    config_dict = {"webhook_url": lc.webhook_url}
+                    if lc.secret:
+                        config_dict["secret"] = lc.secret  # already encrypted
+                    channel = NotificationChannel(
+                        name=f"DingTalk-{lc.id}",
+                        channel_type="dingtalk",
+                        config=json.dumps(config_dict, ensure_ascii=False),
+                        is_active=lc.is_active,
+                    )
+                    db.add(channel)
+            if legacy_configs:
+                db.commit()
+                logger.info("Migrated %d DingTalk configs to notification channels", len(legacy_configs))
+        except Exception as e:
+            logger.warning("DingTalk migration skipped: %s", e)
     yield
 
 app = FastAPI(title="Meerkat AI Bot API", lifespan=lifespan)
@@ -260,60 +283,6 @@ async def test_model_config(config: schemas.ModelConfigCreate):
     return {"status": "success", "message": "Connection successful", "response": result}
 
 
-# ─── DingTalk Config Endpoints (legacy, kept for backward compat) ─────────────
-@app.get("/api/v1/dingtalk-configs", response_model=List[schemas.DingTalkConfig])
-def read_dingtalk_configs(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
-    return crud.get_dingtalk_configs(db)
-
-
-@app.post("/api/v1/dingtalk-configs", response_model=schemas.DingTalkConfig)
-def create_dingtalk_config(config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
-    config_data = config.model_dump()
-    if config_data.get("secret"):
-        config_data["secret"] = encrypt_value(config_data["secret"])
-    return crud.create_dingtalk_config(db, schemas.DingTalkConfigCreate(**config_data))
-
-
-@app.put("/api/v1/dingtalk-configs/{config_id}", response_model=schemas.DingTalkConfig)
-def update_dingtalk_config(config_id: int, config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
-    config_data = config.model_dump()
-    if config_data.get("secret"):
-        config_data["secret"] = encrypt_value(config_data["secret"])
-    return crud.update_dingtalk_config(db, config_id, schemas.DingTalkConfigCreate(**config_data))
-
-
-@app.delete("/api/v1/dingtalk-configs/{config_id}")
-def delete_dingtalk_config(config_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
-    crud.delete_dingtalk_config(db, config_id)
-    return {"message": "Deleted successfully"}
-
-
-@app.post("/api/v1/dingtalk-configs/test")
-async def test_dingtalk_config(config: schemas.DingTalkConfigCreate):
-    temp_config = models.DingTalkConfig(**config.model_dump())
-    test_alert = {
-        "labels": {"alertname": "TestAlert", "severity": "info"},
-        "status": "firing",
-        "annotations": {"summary": "This is a test notification from Meerkat."}
-    }
-    test_analysis = {"summary": "这是一条来自 Meerkat 的测试消息", "root_cause": "", "suggestion": "", "severity": "info"}
-
-    try:
-        await dingtalk_service.send_dingtalk_notification(test_alert, test_analysis, temp_config)
-        logger.info("DingTalk test notification sent successfully")
-        return {"status": "success", "message": "Test message sent to DingTalk"}
-    except Exception as e:
-        error_msg = str(e)
-        logger.error("DingTalk test failed: %s", error_msg, exc_info=True)
-        if "token" in error_msg.lower() or "invalid" in error_msg.lower():
-            hint = "钉钉推送失败：Webhook 地址无效，请检查 access_token"
-        elif "sign" in error_msg.lower() or "secret" in error_msg.lower():
-            hint = "钉钉推送失败：加签验证不通过，请检查 Secret 是否正确"
-        elif "Connection" in error_msg or "timeout" in error_msg.lower():
-            hint = "钉钉推送失败：无法连接钉钉服务器，请检查网络和 Webhook 地址"
-        else:
-            hint = f"钉钉推送失败: {error_msg}"
-        raise HTTPException(status_code=400, detail=hint)
 
 
 # ─── Notification Channel Endpoints ───────────────────────────────────────────
@@ -388,7 +357,6 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
     if active_config and active_config.api_key:
         active_config.api_key = decrypt_value(active_config.api_key)
 
-    dingtalk_config = crud.get_active_dingtalk_config(db)
     # Get all active notification channels
     active_channels = crud.get_active_notification_channels(db)
 
@@ -431,14 +399,6 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
                 # Use NotificationManager if channels configured
                 if channel_list:
                     await notification_manager.dispatch(alert.model_dump(), resolved_analysis, channel_list)
-                # Legacy DingTalk fallback
-                elif dingtalk_config:
-                    dt_config_decrypted = dingtalk_config
-                    if dingtalk_config.secret:
-                        dt_config_decrypted.secret = decrypt_value(dingtalk_config.secret)
-                    await dingtalk_service.send_dingtalk_notification(
-                        alert.model_dump(), resolved_analysis, dt_config_decrypted
-                    )
                 # Save resolved alert record
                 alert_create = schemas.AlertCreate(
                     alert_name=alert.labels.get("alertname", "Unknown"),
@@ -531,15 +491,10 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
                             result=json.dumps({"success": False, "output": str(e)})
                         )
 
-        # Send notifications via NotificationManager or legacy DingTalk
+        # Send notifications via NotificationManager
         if should_notify:
             if channel_list:
                 await notification_manager.dispatch(alert.model_dump(), analysis, channel_list)
-            elif dingtalk_config:
-                dt_config_decrypted = dingtalk_config
-                if dingtalk_config.secret:
-                    dt_config_decrypted.secret = decrypt_value(dingtalk_config.secret)
-                await dingtalk_service.send_dingtalk_notification(alert.model_dump(), analysis, dt_config_decrypted)
 
     logger.info("Processed %d alerts from webhook", len(results))
     return {"status": "success", "processed": len(results)}

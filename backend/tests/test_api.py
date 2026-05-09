@@ -199,25 +199,6 @@ class TestModelConfigAPI:
         }, headers=admin_h)
         assert response.status_code == 404
 
-
-class TestDingTalkConfigAPI:
-    def test_create_dingtalk_config(self):
-        admin_h = _ensure_admin_and_get_headers("dtadmin1", "testpass123")
-        response = client.post("/api/v1/dingtalk-configs", json={
-            "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=test",
-            "secret": "SECtest", "is_active": True
-        }, headers=admin_h)
-        assert response.status_code == 200
-
-    def test_get_dingtalk_configs(self):
-        admin_h = _ensure_admin_and_get_headers("dtadmin2", "testpass123")
-        client.post("/api/v1/dingtalk-configs", json={
-            "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=test", "is_active": True
-        }, headers=admin_h)
-        response = client.get("/api/v1/dingtalk-configs", headers=admin_h)
-        assert response.status_code == 200
-
-
 class TestRoleBasedAccess:
     def test_viewer_cannot_write_configs(self):
         admin_h = _ensure_admin_and_get_headers("rbaadmin1", "testpass123")

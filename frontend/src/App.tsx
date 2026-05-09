@@ -1,9 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { Layout, Menu, Button, Space, Spin } from 'antd';
-import { DashboardOutlined, SettingOutlined, HomeOutlined, TranslationOutlined, MessageOutlined, BellOutlined, LogoutOutlined, ThunderboltOutlined, UserOutlined } from '@ant-design/icons';
+import { DashboardOutlined, SettingOutlined, HomeOutlined, TranslationOutlined, BellOutlined, LogoutOutlined, ThunderboltOutlined, UserOutlined } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ModelConfigPage from './pages/ModelConfig';
-import DingTalkConfigPage from './pages/DingTalkConfig';
 import Overview from './pages/Overview';
 import Login from './pages/Login';
 import AlertDetail from './pages/AlertDetail';
@@ -138,11 +137,6 @@ const AppContent = () => {
       icon: <SettingOutlined />,
       label: <Link to="/config">{t('models')}</Link>,
     },
-    {
-      key: '/dingtalk',
-      icon: <MessageOutlined />,
-      label: <Link to="/dingtalk">{t('dingtalk')}</Link>,
-    },
   ];
 
   // Loading state
@@ -214,7 +208,6 @@ const AppContent = () => {
               <Route path="/remediation-actions" element={<RemediationActions />} />
               <Route path="/users" element={<UserManagement />} />
               <Route path="/config" element={<ModelConfigPage />} />
-              <Route path="/dingtalk" element={<DingTalkConfigPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
