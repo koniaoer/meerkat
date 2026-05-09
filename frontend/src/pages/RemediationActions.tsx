@@ -284,7 +284,7 @@ const RemediationActions: React.FC = () => {
               <Descriptions.Item label={t('autoApproved')}>{detailModal.auto_approved ? t('yes') : t('no')}</Descriptions.Item>
               <Descriptions.Item label={t('approvedBy')}>{detailModal.approved_by || '-'}</Descriptions.Item>
               <Descriptions.Item label={t('config')} span={2}>
-                <pre style={{ maxHeight: 200, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4, fontSize: 12 }}>
+                <pre className="code-block" style={{ maxHeight: 200, overflow: 'auto', padding: 8, borderRadius: 4, fontSize: 12 }}>
                   {(() => {
                     try { return JSON.stringify(JSON.parse(detailModal.config), null, 2); }
                     catch { return detailModal.config; }
@@ -293,7 +293,7 @@ const RemediationActions: React.FC = () => {
               </Descriptions.Item>
               {detailModal.result && (
                 <Descriptions.Item label={t('result')} span={2}>
-                  <pre style={{ maxHeight: 200, overflow: 'auto', background: detailModal.status === 'completed' ? '#f6ffed' : '#fff2f0', padding: 8, borderRadius: 4, fontSize: 12 }}>
+                  <pre className="code-block" style={{ maxHeight: 200, overflow: 'auto', padding: 8, borderRadius: 4, fontSize: 12 }}>
                     {(() => {
                       try { return JSON.stringify(JSON.parse(detailModal.result), null, 2); }
                       catch { return detailModal.result; }

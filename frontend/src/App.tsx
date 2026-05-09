@@ -1,6 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { Layout, Menu, Button, Space, Spin } from 'antd';
-import { DashboardOutlined, SettingOutlined, HomeOutlined, TranslationOutlined, BellOutlined, LogoutOutlined, ThunderboltOutlined, UserOutlined } from '@ant-design/icons';
+import { Layout, Menu, Button, Space, Spin, Tooltip } from 'antd';
+import {
+  DashboardOutlined, SettingOutlined, HomeOutlined,
+  TranslationOutlined, BellOutlined, LogoutOutlined,
+  ThunderboltOutlined, UserOutlined, BulbOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined,
+} from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ModelConfigPage from './pages/ModelConfig';
 import Overview from './pages/Overview';
@@ -10,27 +15,26 @@ import NotificationChannels from './pages/NotificationChannels';
 import RemediationActions from './pages/RemediationActions';
 import UserManagement from './pages/UserManagement';
 import { LanguageProvider, useLanguage } from './services/i18n';
-import { useEffect, useState, ReactNode } from 'react';
+import { ThemeProvider, useTheme } from './services/theme';
+import { useEffect, useState } from 'react';
 import { getMe } from './services/api';
 
-const { Header, Content, Sider } = Layout;
+const { Header, Content } = Layout;
 
-/** Auth state machine:
- *  - 'checking' : still validating token on startup
- *  - 'authenticated' : valid token, show main app
- *  - 'no_auth' : no users in DB yet (first-time setup), show app without login
- *  - 'unauthenticated' : users exist but no valid token, force login
- */
 type AuthState = 'checking' | 'authenticated' | 'no_auth' | 'unauthenticated';
+
+const SIDER_EXPANDED = 220;
+const SIDER_COLLAPSED = 64;
 
 const AppContent = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
+  const { themeMode, toggleTheme } = useTheme();
   const [authState, setAuthState] = useState<AuthState>('checking');
   const [userRole, setUserRole] = useState<string>('viewer');
+  const [collapsed, setCollapsed] = useState(false);
 
-  // Check auth on startup
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
@@ -40,31 +44,18 @@ const AppContent = () => {
           setUserRole(meRes.data.role || 'viewer');
           setAuthState('authenticated');
           return;
-        } catch (e: any) {
-          // Token invalid or expired
-          localStorage.removeItem('token');
-        }
+        } catch { localStorage.removeItem('token'); }
       }
-
-      // No valid token — try accessing a protected endpoint to determine if auth is required
       try {
-        await getMe();  // This will 401 if users exist, 200 if no users
-        // Got 200 = no users in DB = first-time setup
+        await getMe();
         setAuthState('no_auth');
       } catch (e: any) {
-        if (e.response?.status === 401) {
-          // Users exist, auth required
-          setAuthState('unauthenticated');
-        } else {
-          // Network error — don't block, assume no auth for now
-          setAuthState('no_auth');
-        }
+        setAuthState(e.response?.status === 401 ? 'unauthenticated' : 'no_auth');
       }
     };
     checkAuth();
   }, []);
 
-  // Listen for auth-change events (login, logout, 401 interceptor)
   useEffect(() => {
     const handleAuthChange = async () => {
       const token = localStorage.getItem('token');
@@ -91,7 +82,6 @@ const AppContent = () => {
     };
   }, []);
 
-  // Redirect unauthenticated users to login (covers URL bar navigation)
   useEffect(() => {
     if (authState === 'unauthenticated' && location.pathname !== '/login') {
       navigate('/login', { replace: true });
@@ -105,41 +95,23 @@ const AppContent = () => {
     window.dispatchEvent(new Event('auth-change'));
   };
 
+  const isDark = themeMode === 'dark';
+  const siderWidth = collapsed ? SIDER_COLLAPSED : SIDER_EXPANDED;
+
+  // 侧边栏背景：洛天依蓝深色调
+  const siderBg = isDark
+    ? 'linear-gradient(180deg, #0a1628 0%, #0f1d32 100%)'
+    : 'linear-gradient(180deg, #0a2a4a 0%, #0e3a5e 50%, #0f3d64 100%)';
+
   const menuItems = [
-    {
-      key: '/',
-      icon: <HomeOutlined />,
-      label: <Link to="/">{t('overview')}</Link>,
-    },
-    {
-      key: '/alerts',
-      icon: <DashboardOutlined />,
-      label: <Link to="/alerts">{t('dashboard')}</Link>,
-    },
-    {
-      key: '/notification-channels',
-      icon: <BellOutlined />,
-      label: <Link to="/notification-channels">{t('notificationChannels')}</Link>,
-    },
-    {
-      key: '/remediation-actions',
-      icon: <ThunderboltOutlined />,
-      label: <Link to="/remediation-actions">{t('aiAutoOps')}</Link>,
-    },
-    // Admin-only menu items
-    ...(userRole === 'admin' ? [{
-      key: '/users',
-      icon: <UserOutlined />,
-      label: <Link to="/users">{t('userManagement')}</Link>,
-    }] : []),
-    {
-      key: '/config',
-      icon: <SettingOutlined />,
-      label: <Link to="/config">{t('models')}</Link>,
-    },
+    { key: '/', icon: <HomeOutlined />, label: <Link to="/">{t('overview')}</Link> },
+    { key: '/alerts', icon: <DashboardOutlined />, label: <Link to="/alerts">{t('dashboard')}</Link> },
+    { key: '/notification-channels', icon: <BellOutlined />, label: <Link to="/notification-channels">{t('notificationChannels')}</Link> },
+    { key: '/remediation-actions', icon: <ThunderboltOutlined />, label: <Link to="/remediation-actions">{t('aiAutoOps')}</Link> },
+    ...(userRole === 'admin' ? [{ key: '/users', icon: <UserOutlined />, label: <Link to="/users">{t('userManagement')}</Link> }] : []),
+    { key: '/config', icon: <SettingOutlined />, label: <Link to="/config">{t('models')}</Link> },
   ];
 
-  // Loading state
   if (authState === 'checking') {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -148,7 +120,6 @@ const AppContent = () => {
     );
   }
 
-  // Login page — always accessible, no layout
   if (location.pathname === '/login') {
     return (
       <Routes>
@@ -158,48 +129,146 @@ const AppContent = () => {
     );
   }
 
-  // Unauthenticated — force login, catch ALL routes
   if (authState === 'unauthenticated') {
     return <Navigate to="/login" replace />;
   }
 
-  // Authenticated or no_auth — show main app
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible>
-        <div className="logo" style={{ height: 32, margin: 16, background: 'rgba(255, 255, 255, 0.2)', textAlign: 'center', color: 'white', lineHeight: '32px' }}>
-          Meerkat Admin
+    <div className="meerkat" style={{ minHeight: '100vh' }}>
+      {/* ─── 侧边栏：width 动画 + overflow:hidden 裁剪 ─── */}
+      <div
+        className="meerkat-sider"
+        style={{
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: siderWidth,
+          zIndex: 100,
+          background: siderBg,
+          overflow: 'hidden',
+          transition: 'width 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: '2px 0 8px rgba(0,0,0,0.15)',
+        }}
+      >
+        {/* Logo */}
+        <div style={{
+          height: 56,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 16px',
+          borderBottom: '1px solid rgba(102, 204, 255, 0.12)',
+          gap: 10,
+          overflow: 'hidden',
+          whiteSpace: 'nowrap',
+        }}>
+          <div style={{
+            width: 34,
+            height: 34,
+            borderRadius: 10,
+            background: 'linear-gradient(135deg, #66CCFF 0%, #3399CC 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 18,
+            fontWeight: 700,
+            color: '#fff',
+            flexShrink: 0,
+            boxShadow: '0 2px 8px rgba(102, 204, 255, 0.4)',
+          }}>
+            M
+          </div>
+          <span style={{
+            color: '#fff',
+            fontSize: 17,
+            fontWeight: 600,
+            letterSpacing: '0.5px',
+            opacity: collapsed ? 0 : 1,
+            transition: 'opacity 0.2s ease',
+          }}>
+            Meerkat
+          </span>
         </div>
+
+        {/* Menu: collapsed 时 antd 会自动只显示 icon */}
         <Menu
           theme="dark"
           selectedKeys={[location.pathname.startsWith('/alerts/') ? '/alerts' : location.pathname]}
           mode="inline"
+          inlineCollapsed={collapsed}
           items={menuItems}
+          style={{
+            borderRight: 0,
+            marginTop: 4,
+            background: 'transparent',
+          }}
         />
-      </Sider>
-      <Layout className="site-layout">
-        <Header style={{ background: '#fff', padding: '0 24px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-          <Space>
+
+        {/* 底部折叠按钮 */}
+        <div style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          padding: '8px 0',
+          borderTop: '1px solid rgba(102, 204, 255, 0.12)',
+          display: 'flex',
+          justifyContent: 'center',
+        }}>
+          <Button
+            type="text"
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setCollapsed(!collapsed)}
+            style={{
+              color: 'rgba(102, 204, 255, 0.7)',
+              fontSize: 16,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ─── 主内容区 ─── */}
+      <div style={{
+        marginLeft: siderWidth,
+        minHeight: '100vh',
+        transition: 'margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}>
+        <Header style={{
+          padding: '0 24px',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: 8,
+          height: 56,
+          lineHeight: '56px',
+          borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid #f0f0f0',
+          background: isDark ? '#112240' : '#fff',
+        }}>
+          <Space size={4}>
+            <Tooltip title={isDark ? t('switchToLight') : t('switchToDark')}>
+              <Button
+                type="text"
+                icon={<BulbOutlined />}
+                onClick={toggleTheme}
+                style={{ color: isDark ? '#66CCFF' : '#4DB8E8' }}
+              />
+            </Tooltip>
             <Button
               type="text"
               icon={<TranslationOutlined />}
               onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
             >
-              {language === 'zh' ? 'English' : '中文'}
+              {language === 'zh' ? 'EN' : '中'}
             </Button>
             {authState === 'authenticated' && (
-              <Button
-                type="text"
-                icon={<LogoutOutlined />}
-                onClick={handleLogout}
-              >
+              <Button type="text" icon={<LogoutOutlined />} onClick={handleLogout}>
                 {t('logout')}
               </Button>
             )}
           </Space>
         </Header>
-        <Content style={{ margin: '16px' }}>
-          <div style={{ padding: 24, minHeight: 360, background: '#fff' }}>
+        <Content style={{ margin: 16, background: 'transparent' }}>
+          <div style={{ padding: 24, minHeight: 360, borderRadius: 8, background: 'var(--ant-color-bg-container)' }}>
             <Routes>
               <Route path="/" element={<Overview />} />
               <Route path="/alerts" element={<Dashboard />} />
@@ -212,17 +281,19 @@ const AppContent = () => {
             </Routes>
           </div>
         </Content>
-      </Layout>
-    </Layout>
+      </div>
+    </div>
   );
 };
 
 function App() {
   return (
     <LanguageProvider>
-      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AppContent />
-      </Router>
+      <ThemeProvider>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <AppContent />
+        </Router>
+      </ThemeProvider>
     </LanguageProvider>
   );
 }

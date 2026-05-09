@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Input, Switch, Select, Space, message, Popconfirm } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SendOutlined } from '@ant-design/icons';
-import { getNotificationChannels, createNotificationChannel, updateNotificationChannel, deleteNotificationChannel, testNotificationChannel } from '../services/api';
+import { getNotificationChannels, createNotificationChannel, updateNotificationChannel, deleteNotificationChannel, testNotificationChannel, testNotificationChannelConfig } from '../services/api';
 import { useLanguage } from '../services/i18n';
 
 const channelTypeIcons: Record<string, string> = {
@@ -86,6 +86,7 @@ const NotificationChannels: React.FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingChannel, setEditingChannel] = useState<any>(null);
   const [testLoading, setTestLoading] = useState<number | null>(null);
+  const [formTestLoading, setFormTestLoading] = useState(false);
   const [form] = Form.useForm();
   const [channelType, setChannelType] = useState<string>('dingtalk');
 
@@ -106,11 +107,16 @@ const NotificationChannels: React.FC = () => {
     if (channel) {
       setEditingChannel(channel);
       setChannelType(channel.channel_type);
+      // Parse config JSON string to object for form fields
+      let configObj = channel.config || {};
+      if (typeof configObj === 'string') {
+        try { configObj = JSON.parse(configObj); } catch { configObj = {}; }
+      }
       form.setFieldsValue({
         name: channel.name,
         channel_type: channel.channel_type,
         is_active: channel.is_active,
-        config: channel.config || {},
+        config: configObj,
       });
     } else {
       setEditingChannel(null);
@@ -135,6 +141,10 @@ const NotificationChannels: React.FC = () => {
           // leave as string if not valid JSON
         }
       }
+      // Serialize config object to JSON string (backend expects config: str)
+      if (values.config && typeof values.config === 'object') {
+        values.config = JSON.stringify(values.config);
+      }
       if (editingChannel) {
         await updateNotificationChannel(editingChannel.id, values);
       } else {
@@ -143,8 +153,9 @@ const NotificationChannels: React.FC = () => {
       message.success(t('success'));
       setIsModalVisible(false);
       fetchChannels();
-    } catch (error) {
-      message.error(t('failed'));
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.detail || t('failed');
+      message.error(errorMsg);
     }
   };
 
@@ -168,6 +179,38 @@ const NotificationChannels: React.FC = () => {
       message.error(errorMsg);
     } finally {
       setTestLoading(null);
+    }
+  };
+
+  const handleFormTest = async () => {
+    try {
+      const values = await form.validateFields();
+      // Same serialization logic as onFinish
+      if (values.channel_type === 'webhook' && typeof values.config?.headers === 'string') {
+        try { values.config.headers = JSON.parse(values.config.headers); } catch {}
+      }
+      let configData = values.config;
+      if (configData && typeof configData === 'object') {
+        configData = JSON.stringify(configData);
+      }
+      setFormTestLoading(true);
+      await testNotificationChannelConfig({
+        name: values.name || 'Test Channel',
+        channel_type: values.channel_type,
+        config: configData,
+        is_active: values.is_active ?? true,
+      });
+      message.success(t('testSuccess'));
+    } catch (error: any) {
+      if (error.response?.data?.detail) {
+        message.error(error.response.data.detail);
+      } else if (error.errorFields) {
+        // form validation error, ignore — antd shows inline errors
+      } else {
+        message.error(t('testFailed'));
+      }
+    } finally {
+      setFormTestLoading(false);
     }
   };
 
@@ -261,6 +304,9 @@ const NotificationChannels: React.FC = () => {
           </Form.Item>
           <Form.Item>
             <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <Button icon={<SendOutlined />} loading={formTestLoading} onClick={handleFormTest}>
+                {t('testPush')}
+              </Button>
               <Button type="primary" htmlType="submit">
                 {t('save')}
               </Button>

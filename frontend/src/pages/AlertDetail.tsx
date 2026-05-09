@@ -165,7 +165,7 @@ const AlertDetail: React.FC = () => {
                 {action.result && (
                   <details style={{ fontSize: 12 }}>
                     <summary>{t('result')}</summary>
-                    <pre style={{ maxHeight: 150, overflow: 'auto', background: '#f5f5f5', padding: 8, marginTop: 4 }}>
+                    <pre className="code-block" style={{ maxHeight: 150, overflow: 'auto', padding: 8, marginTop: 4 }}>
                       {(() => { try { return JSON.stringify(JSON.parse(action.result), null, 2); } catch { return action.result; } })()}
                     </pre>
                   </details>
@@ -197,7 +197,7 @@ const AlertDetail: React.FC = () => {
             key: 'raw',
             label: t('rawData'),
             children: (
-              <pre style={{ maxHeight: 400, overflow: 'auto', background: '#f5f5f5', padding: 12, borderRadius: 4, fontSize: 12 }}>
+              <pre className="code-block" style={{ maxHeight: 400, overflow: 'auto', padding: 12, borderRadius: 4, fontSize: 12 }}>
                 {JSON.stringify(alert, null, 2)}
               </pre>
             ),

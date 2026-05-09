@@ -323,6 +323,23 @@ def delete_notification_channel(channel_id: int, db: Session = Depends(get_db), 
     return {"message": "Deleted successfully"}
 
 
+@app.post("/api/v1/notification-channels/test")
+async def test_notification_channel_config(channel: schemas.NotificationChannelCreate, _user: models.User = Depends(get_current_user)):
+    """Test a notification channel config before saving"""
+    try:
+        config_dict = json.loads(channel.config) if isinstance(channel.config, str) else channel.config
+        # Do NOT decrypt here — the frontend sends plaintext values for new channels
+        success = await notification_manager.test_channel(channel.channel_type, config_dict)
+        if success:
+            return {"status": "success", "message": f"测试消息已发送到 {channel.name}"}
+        else:
+            raise HTTPException(status_code=400, detail=f"渠道测试失败: {channel.name}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"渠道测试失败: {str(e)}")
+
+
 @app.post("/api/v1/notification-channels/{channel_id}/test")
 async def test_notification_channel(channel_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     channel = crud.get_notification_channel(db, channel_id)

@@ -47,6 +47,7 @@ export const createNotificationChannel = (data: any) => api.post('/notification-
 export const updateNotificationChannel = (id: number, data: any) => api.put(`/notification-channels/${id}`, data);
 export const deleteNotificationChannel = (id: number) => api.delete(`/notification-channels/${id}`);
 export const testNotificationChannel = (id: number) => api.post(`/notification-channels/${id}/test`);
+export const testNotificationChannelConfig = (data: any) => api.post('/notification-channels/test', data);
 
 // Model Config
 export const getModelConfigs = () => api.get('/model-configs');

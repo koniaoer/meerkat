@@ -114,6 +114,9 @@ export const translations: Translation = {
   active: { zh: '已启用', en: 'Active' },
   inactive: { zh: '已禁用', en: 'Inactive' },
   testPush: { zh: '测试推送', en: 'Test Push' },
+  // Theme
+  switchToDark: { zh: '切换暗黑模式', en: 'Switch to Dark' },
+  switchToLight: { zh: '切换亮色模式', en: 'Switch to Light' },
   // Remediation Actions
   remediationActions: { zh: '自动修复', en: 'Remediation Actions' },
   actionName: { zh: '动作名称', en: 'Action Name' },

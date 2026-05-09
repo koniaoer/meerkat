@@ -5,23 +5,93 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.35s, color 0.35s;
 }
 
-.logo {
-  height: 32px;
-  margin: 16px;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
+/* ─── 侧边栏 GPU 加速 ─── */
+.meerkat-sider {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
-.site-layout .ant-layout-header {
-  padding: 0 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* ─── 代码块：主题感知 ─── */
+.code-block {
+  background: var(--ant-color-bg-elevated) !important;
+  border: 1px solid var(--ant-color-border-secondary) !important;
+  transition: background-color 0.35s ease, border-color 0.35s ease;
+}
+
+/* ─── Smooth transitions for theme switch ─── */
+.ant-layout-header,
+.ant-card,
+.ant-table,
+.ant-menu,
+.ant-btn,
+.ant-modal-content,
+.ant-form,
+.ant-input,
+.ant-select-selector,
+.ant-tag,
+.ant-collapse-content {
+  transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease, box-shadow 0.35s ease;
+}
+
+/* ─── Sidebar menu highlight: 洛天依蓝 #66CCFF ─── */
+.ant-menu-dark .ant-menu-item-selected {
+  background: linear-gradient(90deg, rgba(102, 204, 255, 0.25) 0%, rgba(102, 204, 255, 0.08) 100%) !important;
+  border-radius: 8px !important;
+}
+.ant-menu-dark .ant-menu-item-selected .anticon,
+.ant-menu-dark .ant-menu-item-selected a {
+  color: #66CCFF !important;
+}
+.ant-menu-dark .ant-menu-item:hover {
+  background: rgba(102, 204, 255, 0.12) !important;
+  border-radius: 8px !important;
+}
+.ant-menu-dark .ant-menu-item:hover .anticon,
+.ant-menu-dark .ant-menu-item:hover a {
+  color: #8DD8FF !important;
+}
+
+/* ─── 暗黑模式全局深蓝背景 ─── */
+body[data-theme="dark"] {
+  background-color: #0d1b2a !important;
+}
+body[data-theme="light"] {
+  background-color: #f0f5fa !important;
+}
+
+/* ─── 暗黑模式卡片细微蓝光边框 ─── */
+body[data-theme="dark"] .ant-card {
+  border-color: #1e3a5f !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 1px rgba(77, 184, 232, 0.1) !important;
+}
+body[data-theme="dark"] .ant-table {
+  border-color: #1e3a5f !important;
+}
+
+/* ─── 暗黑模式滚动条 ─── */
+body[data-theme="dark"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+body[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: #0d1b2a;
+}
+body[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #1e3a5f;
+  border-radius: 3px;
+}
+body[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #2a5080;
+}
+
+/* ─── Login page background gradient ─── */
+body[data-theme="dark"] .login-bg {
+  background: linear-gradient(135deg, #0d1b2a 0%, #112240 50%, #0f3460 100%) !important;
+}
+body[data-theme="light"] .login-bg {
+  background: linear-gradient(135deg, #e8f7ff 0%, #f0f9ff 50%, #e0f2fe 100%) !important;
 }

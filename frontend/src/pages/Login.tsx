@@ -41,8 +41,8 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#f0f2f5' }}>
-      <Card style={{ width: 400, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+    <div className="login-bg" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+      <Card style={{ width: 400, boxShadow: '0 4px 20px rgba(0,0,0,0.12)', borderRadius: 12 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <Title level={2} style={{ marginBottom: 4 }}>Meerkat</Title>
           <Text type="secondary">{t('systemTitle')}</Text>
