@@ -243,6 +243,27 @@ export const translations: Translation = {
   editTemplate: { zh: '编辑模板', en: 'Edit Template' },
   placeholderHint: { zh: '用 {{变量名}} 作为占位符', en: 'Use {{variable}} as placeholder' },
   builtIn: { zh: '内置', en: 'Built-in' },
+  // Dashboard enhanced
+  recent24h: { zh: '24h新增', en: '24h New' },
+  avgResolution: { zh: '平均恢复时间', en: 'Avg Resolution' },
+  alertTrend: { zh: '告警趋势', en: 'Alert Trend' },
+  topAlerts: { zh: '高频告警', en: 'Top Alerts' },
+  channelCount: { zh: '通知渠道', en: 'Channels' },
+  templateCount: { zh: '修复模板', en: 'Templates' },
+  activeEscalations: { zh: '活跃升级', en: 'Active Escalations' },
+  currentOncall: { zh: '当前值班', en: 'On-Call Now' },
+  remediationStats: { zh: '修复统计', en: 'Remediation Stats' },
+  minutes: { zh: '分钟', en: 'min' },
+  completed: { zh: '已完成', en: 'Completed' },
+  pending: { zh: '待处理', en: 'Pending' },
+  failed: { zh: '失败', en: 'Failed' },
+  totalActions: { zh: '总操作', en: 'Total Actions' },
+  detail: { zh: '详情', en: 'Detail' },
+  timeRange: { zh: '时间范围', en: 'Time Range' },
+  last24h: { zh: '近24小时', en: 'Last 24h' },
+  last7d: { zh: '近7天', en: 'Last 7 days' },
+  last30d: { zh: '近30天', en: 'Last 30 days' },
+  noOncall: { zh: '暂无值班', en: 'No on-call' },
 };
 
 interface LanguageContextType {

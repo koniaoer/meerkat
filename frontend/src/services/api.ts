@@ -37,6 +37,7 @@ export const getMe = () => api.get('/auth/me');
 export const getAlerts = () => api.get('/alerts');
 export const getAlertById = (id: number) => api.get(`/alerts/${id}`);
 export const getAlertStats = () => api.get('/alerts/stats');
+export const getDashboardStats = () => api.get('/dashboard/stats');
 export const getAlertsWithFilters = (params: { status?: string; severity?: string; acknowledged?: boolean; skip?: number; limit?: number }) => api.get('/alerts', { params });
 export const acknowledgeAlert = (id: number) => api.put(`/alerts/${id}/acknowledge`);
 export const silenceAlert = (id: number, durationMinutes: number) => api.put(`/alerts/${id}/silence`, null, { params: { duration_minutes: durationMinutes } });

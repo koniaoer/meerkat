@@ -98,13 +98,71 @@ def silence_alert(db: Session, alert_id: int, duration_minutes: int):
     return db_alert
 
 def get_alert_stats(db: Session):
+    from datetime import timedelta
     alerts = db.query(models.Alert).all()
+    now = datetime.utcnow()
+    recent_24h = len([a for a in alerts if a.created_at and a.created_at > now - timedelta(hours=24)])
+    # Calculate average resolution time
+    resolved_alerts = [a for a in alerts if a.status == "resolved" and a.created_at and a.updated_at]
+    avg_resolution = None
+    if resolved_alerts:
+        total_min = sum((a.updated_at - a.created_at).total_seconds() / 60 for a in resolved_alerts)
+        avg_resolution = round(total_min / len(resolved_alerts), 1)
+    # Top alert names
+    name_counts: dict = {}
+    for a in alerts:
+        name = a.alert_name or "unknown"
+        name_counts[name] = name_counts.get(name, 0) + 1
+    by_name = dict(sorted(name_counts.items(), key=lambda x: x[1], reverse=True)[:10])
     return {
         "total": len(alerts),
         "firing": len([a for a in alerts if a.status == "firing"]),
         "resolved": len([a for a in alerts if a.status == "resolved"]),
         "acknowledged": len([a for a in alerts if a.acknowledged]),
-        "by_severity": {s: len([a for a in alerts if a.severity == s]) for s in set(a.severity for a in alerts)}
+        "by_severity": {s: len([a for a in alerts if a.severity == s]) for s in set(a.severity for a in alerts)},
+        "by_status": {"firing": len([a for a in alerts if a.status == "firing"]), "resolved": len([a for a in alerts if a.status == "resolved"])},
+        "by_alert_name": by_name,
+        "recent_24h": recent_24h,
+        "avg_resolution_minutes": avg_resolution,
+    }
+
+def get_dashboard_stats(db: Session):
+    """Full dashboard stats including all subsystems."""
+    alert_stats = get_alert_stats(db)
+    channel_count = db.query(models.NotificationChannel).filter(models.NotificationChannel.is_active == True).count()
+    template_count = db.query(models.RemediationTemplate).filter(models.RemediationTemplate.is_active == True).count()
+    active_escalations = db.query(models.EscalationEvent).filter(models.EscalationEvent.status == "active").count()
+    # Current on-call
+    oncall_user = None
+    now = datetime.utcnow()
+    shifts = db.query(models.OnCallShift).filter(models.OnCallShift.start_time <= now, models.OnCallShift.end_time >= now).all()
+    if shifts:
+        user = db.query(models.User).filter(models.User.id == shifts[0].user_id).first()
+        if user:
+            oncall_user = user.display_name or user.username
+    # Remediation stats
+    total_actions = db.query(models.RemediationAction).count()
+    completed_actions = db.query(models.RemediationAction).filter(models.RemediationAction.status == "completed").count()
+    failed_actions = db.query(models.RemediationAction).filter(models.RemediationAction.status == "failed").count()
+    pending_actions = db.query(models.RemediationAction).filter(models.RemediationAction.status == "pending").count()
+    # Alert trend (last 7 days)
+    from collections import defaultdict
+    trend = []
+    for i in range(6, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%m-%d")
+        day_start = now - timedelta(days=i)
+        day_end = day_start + timedelta(days=1)
+        count = len([a for a in db.query(models.Alert).all() if a.created_at and day_start <= a.created_at < day_end])
+        resolved_count = len([a for a in db.query(models.Alert).filter(models.Alert.status == "resolved").all() if a.updated_at and day_start <= a.updated_at < day_end])
+        trend.append({"date": day, "total": count, "resolved": resolved_count})
+    return {
+        "alert_stats": alert_stats,
+        "channel_count": channel_count,
+        "template_count": template_count,
+        "active_escalations": active_escalations,
+        "oncall_user": oncall_user,
+        "remediation_stats": {"total": total_actions, "completed": completed_actions, "failed": failed_actions, "pending": pending_actions},
+        "alert_trend": trend,
     }
 
 def get_alerts_with_filters(db: Session, status: str = None, severity: str = None, acknowledged: bool = None, skip: int = 0, limit: int = 100):

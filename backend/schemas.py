@@ -69,6 +69,19 @@ class AlertStats(BaseModel):
     resolved: int
     acknowledged: int
     by_severity: Dict[str, int]
+    by_status: Dict[str, int] = {}
+    by_alert_name: Dict[str, int] = {}
+    recent_24h: int = 0
+    avg_resolution_minutes: Optional[float] = None
+
+class DashboardStats(BaseModel):
+    alert_stats: AlertStats
+    channel_count: int = 0
+    template_count: int = 0
+    active_escalations: int = 0
+    oncall_user: Optional[str] = None
+    remediation_stats: Dict[str, int] = {}
+    alert_trend: List[Dict[str, Any]] = []
 
 class PrometheusAlert(BaseModel):
     status: str

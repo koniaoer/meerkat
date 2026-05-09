@@ -1,247 +1,183 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Row, Col, Card, Statistic, Select, Table, Tag, Button, Dropdown, Space, Typography } from 'antd';
-import { AlertOutlined, CheckCircleOutlined, EyeOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import { getAlertsWithFilters, getAlertStats, acknowledgeAlert, silenceAlert } from '../services/api';
+import { Row, Col, Card, Statistic, Select, Table, Tag, Button, Dropdown, Space, Progress } from 'antd';
+import { AlertOutlined, CheckCircleOutlined, EyeOutlined, ExclamationCircleOutlined,
+  BellOutlined, ToolOutlined, RiseOutlined, TeamOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { getAlertsWithFilters, getDashboardStats, acknowledgeAlert, silenceAlert } from '../services/api';
 import { useLanguage } from '../services/i18n';
 import { useNavigate } from 'react-router-dom';
 
-const { Title } = Typography;
-
 const severityColorMap: Record<string, string> = {
-  critical: 'volcano',
-  high: 'red',
-  warning: 'orange',
-  medium: 'gold',
-  low: 'blue',
-  info: 'default',
+  critical: 'volcano', high: 'red', warning: 'orange', medium: 'gold', low: 'blue', info: 'default',
+};
+
+/* ── Simple bar chart via CSS ─────────────────────────────────── */
+const MiniBarChart: React.FC<{ data: { date: string; total: number; resolved: number }[] }> = ({ data }) => {
+  const maxVal = Math.max(...data.map(d => d.total), 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 100, padding: '8px 0' }}>
+      {data.map((d, i) => (
+        <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <div style={{ display: 'flex', gap: 1, alignItems: 'flex-end', height: 70 }}>
+            <div style={{ width: 10, background: '#ff4d4f', height: `${(d.total / maxVal) * 60}px`, borderRadius: 2, transition: 'height 0.3s' }} />
+            <div style={{ width: 10, background: '#52c41a', height: `${(d.resolved / maxVal) * 60}px`, borderRadius: 2, transition: 'height 0.3s' }} />
+          </div>
+          <span style={{ fontSize: 10, color: '#999' }}>{d.date}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/* ── Severity ring ────────────────────────────────────────────── */
+const SeverityRing: React.FC<{ data: Record<string, number> }> = ({ data }) => {
+  const total = Object.values(data).reduce((a, b) => a + b, 0) || 1;
+  const colors: Record<string, string> = { critical: '#ff4d4f', high: '#fa541c', warning: '#faad14', medium: '#ffd666', low: '#1890ff', info: '#d9d9d9' };
+  let cumulative = 0;
+  const segments = Object.entries(data).map(([k, v]) => {
+    const start = cumulative;
+    cumulative += (v / total) * 100;
+    return { key: k, value: v, color: colors[k] || '#d9d9d9', start, end: cumulative };
+  });
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <svg width="80" height="80" viewBox="0 0 36 36">
+        {segments.map(s => (
+          <circle key={s.key} r="16" cx="18" cy="18" fill="transparent" stroke={s.color}
+            strokeWidth="4" strokeDasharray={`${s.end - s.start} ${100 - (s.end - s.start)}`}
+            strokeDashoffset={-(s.start)} transform="rotate(-90 18 18)" />
+        ))}
+        <text x="18" y="18" textAnchor="middle" dominantBaseline="central" fontSize="7" fontWeight="bold">{total}</text>
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {segments.map(s => (
+          <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+            <div style={{ width: 8, height: 8, borderRadius: 2, background: s.color }} />
+            <span>{s.key}: {s.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 const Dashboard: React.FC = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const [alerts, setAlerts] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>({ total: 0, firing: 0, resolved: 0, acknowledged: 0, by_severity: {} });
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{ status?: string; severity?: string; acknowledged?: string }>({});
 
   const fetchStats = async () => {
-    try {
-      const res = await getAlertStats();
-      setStats(res.data);
-    } catch (error) {
-      console.error('Failed to fetch stats', error);
-    }
+    try { const res = await getDashboardStats(); setStats(res.data); } catch (e) { console.error(e); }
   };
 
   const fetchAlerts = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { limit: 100 };
+      const params: any = { limit: 50 };
       if (filters.status) params.status = filters.status;
       if (filters.severity) params.severity = filters.severity;
-      if (filters.acknowledged !== undefined && filters.acknowledged !== '') {
-        params.acknowledged = filters.acknowledged === 'yes';
-      }
+      if (filters.acknowledged) params.acknowledged = filters.acknowledged === 'yes';
       const res = await getAlertsWithFilters(params);
       setAlerts(res.data);
-    } catch (error) {
-      console.error('Failed to fetch alerts', error);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   }, [filters]);
 
   useEffect(() => {
-    fetchStats();
-    fetchAlerts();
-    const interval = setInterval(() => {
-      fetchStats();
-      fetchAlerts();
-    }, 10000);
-    return () => clearInterval(interval);
+    fetchStats(); fetchAlerts();
+    const iv = setInterval(() => { fetchStats(); fetchAlerts(); }, 15000);
+    return () => clearInterval(iv);
   }, [fetchAlerts]);
 
-  const handleAcknowledge = async (id: number) => {
-    try {
-      await acknowledgeAlert(id);
-      fetchStats();
-      fetchAlerts();
-    } catch (error) {
-      console.error('Failed to acknowledge alert', error);
-    }
-  };
-
-  const handleSilence = async (id: number, durationMinutes: number) => {
-    try {
-      await silenceAlert(id, durationMinutes);
-      fetchStats();
-      fetchAlerts();
-    } catch (error) {
-      console.error('Failed to silence alert', error);
-    }
-  };
-
-  const silenceMenuItems = (id: number) => [
+  const handleAcknowledge = async (id: number) => { try { await acknowledgeAlert(id); fetchStats(); fetchAlerts(); } catch {} };
+  const handleSilence = async (id: number, m: number) => { try { await silenceAlert(id, m); fetchStats(); fetchAlerts(); } catch {} };
+  const silenceItems = (id: number) => [
     { key: '30', label: '30 min', onClick: () => handleSilence(id, 30) },
     { key: '60', label: '1 h', onClick: () => handleSilence(id, 60) },
     { key: '120', label: '2 h', onClick: () => handleSilence(id, 120) },
-    { key: '240', label: '4 h', onClick: () => handleSilence(id, 240) },
   ];
 
+  const as = stats?.alert_stats || {};
+  const rs = stats?.remediation_stats || {};
+  const trend = stats?.alert_trend || [];
+
   const columns = [
-    {
-      title: t('time'),
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 180,
-      render: (text: string) => new Date(text).toLocaleString(),
-    },
-    {
-      title: t('alertName'),
-      dataIndex: 'alert_name',
-      key: 'alert_name',
-      ellipsis: true,
-    },
-    {
-      title: t('status'),
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (status: string) => (
-        <Tag color={status === 'firing' ? 'red' : 'green'}>{status.toUpperCase()}</Tag>
-      ),
-    },
-    {
-      title: t('severity'),
-      dataIndex: 'severity',
-      key: 'severity',
-      width: 100,
-      render: (severity: string) => (
-        <Tag color={severityColorMap[severity] || 'default'}>{severity ? severity.toUpperCase() : '-'}</Tag>
-      ),
-    },
-    {
-      title: t('analysisSummary'),
-      dataIndex: 'analysis_summary',
-      key: 'analysis_summary',
-      ellipsis: true,
-      render: (text: string) => (
-        <span style={{ color: text ? undefined : '#999' }}>{text || t('waiting')}</span>
-      ),
-    },
-    {
-      title: t('acknowledged'),
-      dataIndex: 'acknowledged',
-      key: 'acknowledged',
-      width: 90,
-      render: (ack: boolean) => (
-        <Tag color={ack ? 'green' : 'default'}>{ack ? t('yes') : t('no')}</Tag>
-      ),
-    },
-    {
-      title: t('actions'),
-      key: 'actions',
-      width: 180,
-      render: (_: any, record: any) => (
-        <Space size="small">
-          {!record.acknowledged && (
-            <Button size="small" onClick={(e) => { e.stopPropagation(); handleAcknowledge(record.id); }}>
-              {t('acknowledge')}
-            </Button>
-          )}
-          <Dropdown menu={{ items: silenceMenuItems(record.id) }}>
-            <Button size="small" onClick={(e) => e.stopPropagation()}>
-              {t('silence')}
-            </Button>
-          </Dropdown>
-        </Space>
-      ),
-    },
+    { title: t('time'), dataIndex: 'created_at', key: 't', width: 160, render: (v: string) => new Date(v).toLocaleString() },
+    { title: t('alertName'), dataIndex: 'alert_name', key: 'n', ellipsis: true },
+    { title: t('status'), dataIndex: 'status', key: 's', width: 90, render: (v: string) => <Tag color={v === 'firing' ? 'red' : 'green'}>{v?.toUpperCase()}</Tag> },
+    { title: t('severity'), dataIndex: 'severity', key: 'sv', width: 90, render: (v: string) => <Tag color={severityColorMap[v]}>{v?.toUpperCase() || '-'}</Tag> },
+    { title: t('analysisSummary'), dataIndex: 'analysis_summary', key: 'a', ellipsis: true, render: (v: string) => <span style={{ color: v ? undefined : '#999' }}>{v || t('waiting')}</span> },
+    { title: t('actions'), key: 'ac', width: 150, render: (_: any, r: any) => <Space size="small">
+      {!r.acknowledged && <Button size="small" onClick={e => { e.stopPropagation(); handleAcknowledge(r.id); }}>{t('acknowledge')}</Button>}
+      <Dropdown menu={{ items: silenceItems(r.id) }}><Button size="small" onClick={e => e.stopPropagation()}>{t('silence')}</Button></Dropdown>
+    </Space> },
   ];
 
   return (
     <div>
-      <Title level={2}>{t('dashboard')}</Title>
+      {/* ── Row 1: Core alert stats ────────────────────────────────── */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+        <Col span={4}><Card bordered={false} size="small"><Statistic title={t('totalAlerts')} value={as.total || 0} prefix={<ExclamationCircleOutlined />} /></Card></Col>
+        <Col span={4}><Card bordered={false} size="small"><Statistic title={t('firingAlerts')} value={as.firing || 0} valueStyle={{ color: (as.firing || 0) > 0 ? '#cf1322' : '#3fad49' }} prefix={<AlertOutlined />} /></Card></Col>
+        <Col span={4}><Card bordered={false} size="small"><Statistic title={t('resolvedAlerts')} value={as.resolved || 0} valueStyle={{ color: '#3fad49' }} prefix={<CheckCircleOutlined />} /></Card></Col>
+        <Col span={4}><Card bordered={false} size="small"><Statistic title={t('recent24h')} value={as.recent_24h || 0} prefix={<ClockCircleOutlined />} /></Card></Col>
+        <Col span={4}><Card bordered={false} size="small"><Statistic title={t('avgResolution')} value={as.avg_resolution_minutes || '-'} suffix={as.avg_resolution_minutes ? t('minutes') : ''} prefix={<ClockCircleOutlined />} /></Card></Col>
+        <Col span={4}><Card bordered={false} size="small"><Statistic title={t('acknowledgedAlerts')} value={as.acknowledged || 0} prefix={<EyeOutlined />} /></Card></Col>
+      </Row>
 
-      {/* Top stat cards */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
-          <Card bordered={false}>
-            <Statistic title={t('totalAlerts')} value={stats.total} prefix={<ExclamationCircleOutlined />} />
+      {/* ── Row 2: Subsystem overview ──────────────────────────────── */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+        <Col span={4}><Card bordered={false} size="small" hoverable onClick={() => navigate('/notification-channels')}><Statistic title={t('channelCount')} value={stats?.channel_count || 0} prefix={<BellOutlined />} /></Card></Col>
+        <Col span={4}><Card bordered={false} size="small" hoverable onClick={() => navigate('/remediation-templates')}><Statistic title={t('templateCount')} value={stats?.template_count || 0} prefix={<ToolOutlined />} /></Card></Col>
+        <Col span={4}><Card bordered={false} size="small" hoverable onClick={() => navigate('/escalation')}><Statistic title={t('activeEscalations')} value={stats?.active_escalations || 0} valueStyle={{ color: (stats?.active_escalations || 0) > 0 ? '#fa541c' : undefined }} prefix={<RiseOutlined />} /></Card></Col>
+        <Col span={6}><Card bordered={false} size="small" hoverable onClick={() => navigate('/oncall')}>
+          <Statistic title={t('currentOncall')} value={stats?.oncall_user || t('noOncall')} prefix={<TeamOutlined />} valueStyle={{ fontSize: 18, fontWeight: stats?.oncall_user ? 600 : 400 }} />
+        </Card></Col>
+        <Col span={6}><Card bordered={false} size="small" hoverable onClick={() => navigate('/remediation-actions')}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Statistic title={t('completed')} value={rs.completed || 0} valueStyle={{ color: '#52c41a', fontSize: 18 }} />
+            <Statistic title={t('pending')} value={rs.pending || 0} valueStyle={{ color: '#faad14', fontSize: 18 }} />
+            <Statistic title={t('failed')} value={rs.failed || 0} valueStyle={{ color: '#ff4d4f', fontSize: 18 }} />
+          </div>
+        </Card></Col>
+      </Row>
+
+      {/* ── Row 3: Trend + Severity + Top alerts ───────────────────── */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
+        <Col span={12}>
+          <Card bordered={false} size="small" title={t('alertTrend')} extra={<Space><Tag color="red">Firing</Tag><Tag color="green">Resolved</Tag></Space>}>
+            <MiniBarChart data={trend} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card bordered={false}>
-            <Statistic title={t('firingAlerts')} value={stats.firing} valueStyle={{ color: stats.firing > 0 ? '#cf1322' : '#3fad49' }} prefix={<AlertOutlined />} />
+          <Card bordered={false} size="small" title={t('severity')}>
+            <SeverityRing data={as.by_severity || {}} />
           </Card>
         </Col>
         <Col span={6}>
-          <Card bordered={false}>
-            <Statistic title={t('resolvedAlerts')} value={stats.resolved} valueStyle={{ color: '#3fad49' }} prefix={<CheckCircleOutlined />} />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card bordered={false}>
-            <Statistic title={t('acknowledgedAlerts')} value={stats.acknowledged} prefix={<EyeOutlined />} />
+          <Card bordered={false} size="small" title={t('topAlerts')} style={{ maxHeight: 200, overflow: 'auto' }}>
+            {Object.entries(as.by_alert_name || {}).slice(0, 5).map(([name, count]: [string, any]) => (
+              <div key={name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f0f0f0', fontSize: 12 }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{name}</span>
+                <Tag>{count}</Tag>
+              </div>
+            ))}
+            {Object.keys(as.by_alert_name || {}).length === 0 && <span style={{ color: '#999' }}>-</span>}
           </Card>
         </Col>
       </Row>
 
-      {/* Filter bar */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col>
-          <Select
-            allowClear
-            placeholder={t('statusFilter')}
-            style={{ width: 140 }}
-            onChange={(val) => setFilters({ ...filters, status: val })}
-            options={[
-              { value: 'firing', label: t('firing') },
-              { value: 'resolved', label: t('resolved') },
-            ]}
-          />
-        </Col>
-        <Col>
-          <Select
-            allowClear
-            placeholder={t('severityFilter')}
-            style={{ width: 140 }}
-            onChange={(val) => setFilters({ ...filters, severity: val })}
-            options={[
-              { value: 'critical', label: t('critical') },
-              { value: 'high', label: t('high') },
-              { value: 'warning', label: t('warning') },
-              { value: 'medium', label: t('medium') },
-              { value: 'low', label: t('low') },
-              { value: 'info', label: t('info') },
-            ]}
-          />
-        </Col>
-        <Col>
-          <Select
-            allowClear
-            placeholder={t('acknowledgedFilter')}
-            style={{ width: 140 }}
-            onChange={(val) => setFilters({ ...filters, acknowledged: val })}
-            options={[
-              { value: 'yes', label: t('yes') },
-              { value: 'no', label: t('no') },
-            ]}
-          />
-        </Col>
+      {/* ── Filter bar ─────────────────────────────────────────────── */}
+      <Row gutter={16} style={{ marginBottom: 12 }}>
+        <Col><Select allowClear placeholder={t('statusFilter')} style={{ width: 130 }} onChange={v => setFilters({ ...filters, status: v })} options={[{ value: 'firing', label: t('firing') }, { value: 'resolved', label: t('resolved') }]} /></Col>
+        <Col><Select allowClear placeholder={t('severityFilter')} style={{ width: 130 }} onChange={v => setFilters({ ...filters, severity: v })} options={[{ value: 'critical', label: t('critical') }, { value: 'high', label: t('high') }, { value: 'warning', label: t('warning') }, { value: 'info', label: t('info') }]} /></Col>
+        <Col><Select allowClear placeholder={t('acknowledgedFilter')} style={{ width: 130 }} onChange={v => setFilters({ ...filters, acknowledged: v })} options={[{ value: 'yes', label: t('yes') }, { value: 'no', label: t('no') }]} /></Col>
       </Row>
 
-      {/* Alert table */}
-      <Table
-        dataSource={alerts}
-        columns={columns}
-        rowKey="id"
-        loading={loading}
-        onRow={(record) => ({
-          onClick: () => navigate(`/alerts/${record.id}`),
-          style: { cursor: 'pointer' },
-        })}
-      />
+      {/* ── Alert table ────────────────────────────────────────────── */}
+      <Table dataSource={alerts} columns={columns} rowKey="id" loading={loading} size="small" pagination={{ pageSize: 10 }}
+        onRow={r => ({ onClick: () => navigate(`/alerts/${r.id}`), style: { cursor: 'pointer' } })} />
     </div>
   );
 };

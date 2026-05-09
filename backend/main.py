@@ -648,6 +648,11 @@ def get_alert_stats(db: Session = Depends(get_db), _user: models.User = Depends(
     """Get alert statistics"""
     return crud.get_alert_stats(db)
 
+@app.get("/api/v1/dashboard/stats", response_model=schemas.DashboardStats)
+def get_dashboard_stats(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    """Get full dashboard statistics including all subsystems"""
+    return crud.get_dashboard_stats(db)
+
 
 @app.get("/api/v1/alerts/{alert_id}", response_model=schemas.Alert)
 def get_alert(alert_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
