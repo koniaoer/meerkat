@@ -85,7 +85,7 @@ def get_me(current_user: models.User = Depends(get_current_user)):
 
 # ─── Model Config Endpoints ───────────────────────────────────────────────────
 @app.post("/api/v1/model-configs", response_model=schemas.ModelConfig)
-def create_config(config: schemas.ModelConfigCreate, db: Session = Depends(get_db)):
+def create_config(config: schemas.ModelConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     # Encrypt API key before saving
     config_data = config.model_dump()
     config_data["api_key"] = encrypt_value(config_data["api_key"])
@@ -94,12 +94,12 @@ def create_config(config: schemas.ModelConfigCreate, db: Session = Depends(get_d
 
 
 @app.get("/api/v1/model-configs", response_model=List[schemas.ModelConfig])
-def read_configs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_configs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     return crud.get_model_configs(db, skip=skip, limit=limit)
 
 
 @app.get("/api/v1/model-configs/active", response_model=schemas.ModelConfig)
-def read_active_config(db: Session = Depends(get_db)):
+def read_active_config(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     config = crud.get_active_model_config(db)
     if not config:
         raise HTTPException(status_code=404, detail="No active config found")
@@ -107,7 +107,7 @@ def read_active_config(db: Session = Depends(get_db)):
 
 
 @app.put("/api/v1/model-configs/{config_id}", response_model=schemas.ModelConfig)
-def update_config(config_id: int, config: schemas.ModelConfigCreate, db: Session = Depends(get_db)):
+def update_config(config_id: int, config: schemas.ModelConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     config_data = config.model_dump()
     config_data["api_key"] = encrypt_value(config_data["api_key"])
     db_config = crud.update_model_config(db, config_id, schemas.ModelConfigCreate(**config_data))
@@ -117,7 +117,7 @@ def update_config(config_id: int, config: schemas.ModelConfigCreate, db: Session
 
 
 @app.delete("/api/v1/model-configs/{config_id}")
-def delete_config(config_id: int, db: Session = Depends(get_db)):
+def delete_config(config_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     crud.delete_model_config(db, config_id)
     return {"message": "Deleted successfully"}
 
@@ -138,12 +138,12 @@ async def test_model_config(config: schemas.ModelConfigCreate):
 
 # ─── DingTalk Config Endpoints (legacy, kept for backward compat) ─────────────
 @app.get("/api/v1/dingtalk-configs", response_model=List[schemas.DingTalkConfig])
-def read_dingtalk_configs(db: Session = Depends(get_db)):
+def read_dingtalk_configs(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     return crud.get_dingtalk_configs(db)
 
 
 @app.post("/api/v1/dingtalk-configs", response_model=schemas.DingTalkConfig)
-def create_dingtalk_config(config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db)):
+def create_dingtalk_config(config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     config_data = config.model_dump()
     if config_data.get("secret"):
         config_data["secret"] = encrypt_value(config_data["secret"])
@@ -151,7 +151,7 @@ def create_dingtalk_config(config: schemas.DingTalkConfigCreate, db: Session = D
 
 
 @app.put("/api/v1/dingtalk-configs/{config_id}", response_model=schemas.DingTalkConfig)
-def update_dingtalk_config(config_id: int, config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db)):
+def update_dingtalk_config(config_id: int, config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     config_data = config.model_dump()
     if config_data.get("secret"):
         config_data["secret"] = encrypt_value(config_data["secret"])
@@ -159,7 +159,7 @@ def update_dingtalk_config(config_id: int, config: schemas.DingTalkConfigCreate,
 
 
 @app.delete("/api/v1/dingtalk-configs/{config_id}")
-def delete_dingtalk_config(config_id: int, db: Session = Depends(get_db)):
+def delete_dingtalk_config(config_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     crud.delete_dingtalk_config(db, config_id)
     return {"message": "Deleted successfully"}
 
@@ -194,12 +194,12 @@ async def test_dingtalk_config(config: schemas.DingTalkConfigCreate):
 
 # ─── Notification Channel Endpoints ───────────────────────────────────────────
 @app.get("/api/v1/notification-channels", response_model=List[schemas.NotificationChannelResponse])
-def list_notification_channels(db: Session = Depends(get_db)):
+def list_notification_channels(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     return crud.get_notification_channels(db)
 
 
 @app.post("/api/v1/notification-channels", response_model=schemas.NotificationChannelResponse)
-def create_notification_channel(channel: schemas.NotificationChannelCreate, db: Session = Depends(get_db)):
+def create_notification_channel(channel: schemas.NotificationChannelCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     # Encrypt sensitive fields in config JSON
     config_dict = json.loads(channel.config) if isinstance(channel.config, str) else channel.config
     sensitive_keys = ["api_key", "secret", "password", "smtp_password"]
@@ -211,7 +211,7 @@ def create_notification_channel(channel: schemas.NotificationChannelCreate, db: 
 
 
 @app.put("/api/v1/notification-channels/{channel_id}", response_model=schemas.NotificationChannelResponse)
-def update_notification_channel(channel_id: int, channel: schemas.NotificationChannelCreate, db: Session = Depends(get_db)):
+def update_notification_channel(channel_id: int, channel: schemas.NotificationChannelCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     config_dict = json.loads(channel.config) if isinstance(channel.config, str) else channel.config
     sensitive_keys = ["api_key", "secret", "password", "smtp_password"]
     for key in sensitive_keys:
@@ -225,13 +225,13 @@ def update_notification_channel(channel_id: int, channel: schemas.NotificationCh
 
 
 @app.delete("/api/v1/notification-channels/{channel_id}")
-def delete_notification_channel(channel_id: int, db: Session = Depends(get_db)):
+def delete_notification_channel(channel_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     crud.delete_notification_channel(db, channel_id)
     return {"message": "Deleted successfully"}
 
 
 @app.post("/api/v1/notification-channels/{channel_id}/test")
-async def test_notification_channel(channel_id: int, db: Session = Depends(get_db)):
+async def test_notification_channel(channel_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     channel = crud.get_notification_channel(db, channel_id)
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
@@ -428,7 +428,7 @@ def get_alerts(
     status: Optional[str] = Query(None, description="Filter by status: firing/resolved"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
     acknowledged: Optional[bool] = Query(None, description="Filter by acknowledged status"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), _user: models.User = Depends(get_current_user),
 ):
     """Get alerts with optional filters"""
     if any([status, severity, acknowledged is not None]):
@@ -437,13 +437,13 @@ def get_alerts(
 
 
 @app.get("/api/v1/alerts/stats", response_model=schemas.AlertStats)
-def get_alert_stats(db: Session = Depends(get_db)):
+def get_alert_stats(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     """Get alert statistics"""
     return crud.get_alert_stats(db)
 
 
 @app.get("/api/v1/alerts/{alert_id}", response_model=schemas.Alert)
-def get_alert(alert_id: int, db: Session = Depends(get_db)):
+def get_alert(alert_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     """Get a single alert by ID"""
     alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
     if not alert:
@@ -452,7 +452,7 @@ def get_alert(alert_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/api/v1/alerts/{alert_id}/acknowledge", response_model=schemas.Alert)
-def acknowledge_alert(alert_id: int, db: Session = Depends(get_db)):
+def acknowledge_alert(alert_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     """Acknowledge an alert"""
     result = crud.acknowledge_alert(db, alert_id, acknowledged_by="admin")
     if not result:
@@ -462,7 +462,7 @@ def acknowledge_alert(alert_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/api/v1/alerts/{alert_id}/silence", response_model=schemas.Alert)
-def silence_alert(alert_id: int, duration_minutes: int = Query(120, description="Silence duration in minutes"), db: Session = Depends(get_db)):
+def silence_alert(alert_id: int, duration_minutes: int = Query(120, description="Silence duration in minutes"), db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     """Silence an alert for a given duration"""
     result = crud.silence_alert(db, alert_id, duration_minutes)
     if not result:
@@ -478,14 +478,14 @@ def list_remediation_actions(
     status: Optional[str] = Query(None),
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), _user: models.User = Depends(get_current_user),
 ):
     """List remediation actions, optionally filtered by alert_id or status"""
     return crud.get_remediation_actions(db, alert_id=alert_id, status=status, skip=skip, limit=limit)
 
 
 @app.get("/api/v1/remediation-actions/{action_id}", response_model=schemas.RemediationActionResponse)
-def get_remediation_action(action_id: int, db: Session = Depends(get_db)):
+def get_remediation_action(action_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     """Get a single remediation action"""
     action = crud.get_remediation_action(db, action_id)
     if not action:
@@ -497,7 +497,7 @@ def get_remediation_action(action_id: int, db: Session = Depends(get_db)):
 async def approve_remediation_action(
     action_id: int,
     approval: schemas.ActionApproval,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db), _user: models.User = Depends(get_current_user),
 ):
     """Approve or reject a remediation action"""
     db_action = crud.get_remediation_action(db, action_id)
@@ -534,7 +534,7 @@ async def approve_remediation_action(
 
 
 @app.post("/api/v1/remediation-actions/{action_id}/execute")
-async def execute_remediation_action(action_id: int, db: Session = Depends(get_db)):
+async def execute_remediation_action(action_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     """Re-execute a completed or failed action"""
     db_action = crud.get_remediation_action(db, action_id)
     if not db_action:
