@@ -1,17 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Switch, Space, Tag, message, Popconfirm, InputNumber } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Button, Modal, Form, Input, Select, Switch, Space, Tag, message, Popconfirm, Progress, Tooltip, InputNumber, Empty, Badge, Divider } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, ThunderboltOutlined, PlayCircleOutlined,
+  ReloadOutlined, HddOutlined, ApiOutlined, CodeOutlined, SafetyCertificateOutlined,
+  CheckCircleOutlined, WarningOutlined, CloseCircleOutlined, EyeOutlined, SearchOutlined } from '@ant-design/icons';
 import { useLanguage } from '../services/i18n';
 import { getRemediationTemplates, createRemediationTemplate, updateRemediationTemplate, deleteRemediationTemplate } from '../services/api';
 
 const { TextArea } = Input;
+
+const categoryConfig: Record<string, { icon: React.ReactNode; color: string; bg: string }> = {
+  restart: { icon: <ReloadOutlined />, color: '#fa8c16', bg: '#fff7e6' },
+  disk: { icon: <HddOutlined />, color: '#722ed1', bg: '#f9f0ff' },
+  network: { icon: <ApiOutlined />, color: '#13c2c2', bg: '#e6fffb' },
+  service: { icon: <SafetyCertificateOutlined />, color: '#1890ff', bg: '#e6f7ff' },
+  general: { icon: <CodeOutlined />, color: '#595959', bg: '#fafafa' },
+};
+
+const riskConfig: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
+  low: { color: '#52c41a', label: '🟢 低风险', icon: <CheckCircleOutlined /> },
+  medium: { color: '#faad14', label: '🟡 中风险', icon: <WarningOutlined /> },
+  high: { color: '#ff4d4f', label: '🔴 高风险', icon: <CloseCircleOutlined /> },
+};
 
 const RemediationTemplates: React.FC = () => {
   const { t } = useLanguage();
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [viewing, setViewing] = useState<any>(null);
   const [editing, setEditing] = useState<any>(null);
+  const [filterCategory, setFilterCategory] = useState<string | undefined>();
+  const [searchText, setSearchText] = useState('');
   const [form] = Form.useForm();
 
   const loadData = async () => {
@@ -26,7 +46,7 @@ const RemediationTemplates: React.FC = () => {
     setEditing(tmpl || null);
     if (tmpl) {
       const ml = JSON.parse(tmpl.match_labels || '{}');
-      const labelsArr = Object.entries(ml).map(([k, v]) => ({ key: k, value: v }));
+      const labelsArr = Object.entries(ml).map(([k, v]) => ({ key: k, value: v as string }));
       form.setFieldsValue({
         ...tmpl,
         match_labels: labelsArr,
@@ -38,6 +58,11 @@ const RemediationTemplates: React.FC = () => {
       form.setFieldsValue({ is_active: true, category: 'general', action_type: 'shell', risk_level: 'medium', requires_approval: true, match_labels: [], match_severity: [] });
     }
     setModalOpen(true);
+  };
+
+  const showDetail = (tmpl: any) => {
+    setViewing(tmpl);
+    setDetailOpen(true);
   };
 
   const onFinish = async (values: any) => {
@@ -67,74 +92,301 @@ const RemediationTemplates: React.FC = () => {
     try { await deleteRemediationTemplate(id); message.success(t('success')); loadData(); } catch { message.error(t('failed')); }
   };
 
-  const categoryColor: any = { restart: 'orange', disk: 'purple', network: 'cyan', service: 'blue', general: 'default' };
-  const riskColor: any = { low: 'green', medium: 'orange', high: 'red' };
+  const getSuccessRate = (v: string) => {
+    try { const [c, total] = v.split('/').map(Number); return total > 0 ? Math.round(c / total * 100) : 0; } catch { return 0; }
+  };
 
-  const columns = [
-    { title: t('ruleName'), dataIndex: 'name', key: 'name' },
-    { title: t('category'), dataIndex: 'category', key: 'cat', width: 80, render: (v: string) => <Tag color={categoryColor[v] || 'default'}>{t(v)}</Tag> },
-    { title: t('actionType'), dataIndex: 'action_type', key: 'at', width: 80, render: (v: string) => <Tag>{v}</Tag> },
-    { title: t('riskLevel'), dataIndex: 'risk_level', key: 'rl', width: 80, render: (v: string) => <Tag color={riskColor[v] || 'default'}>{v}</Tag> },
-    { title: t('requiresApproval'), dataIndex: 'requires_approval', key: 'ra', width: 90, render: (v: boolean) => <Tag color={v ? 'orange' : 'green'}>{v ? t('requiresApproval') : t('autoExecute')}</Tag> },
-    { title: t('usageCount'), dataIndex: 'usage_count', key: 'uc', width: 80 },
-    { title: t('successRate'), dataIndex: 'success_rate', key: 'sr', width: 80, render: (v: string) => {
-      try { const [c, t] = v.split('/').map(Number); return t > 0 ? `${Math.round(c/t*100)}%` : '-'; } catch { return '-'; }
-    }},
-    { title: t('matchKeywords'), dataIndex: 'match_keywords', key: 'mk', ellipsis: true, render: (v: string) => v ? v.split(',').slice(0,3).map((k: string) => <Tag key={k}>{k.trim()}</Tag>) : '-' },
-    { title: t('isActive'), dataIndex: 'is_active', key: 'ia', width: 70, render: (v: boolean) => <Tag color={v ? 'green' : 'default'}>{v ? t('active') : t('inactive')}</Tag> },
-    { title: t('actions'), key: 'actions', width: 100, render: (_: any, r: any) => <Space>
-      <Button size="small" icon={<EditOutlined />} onClick={() => showModal(r)} />
-      <Popconfirm title={t('deleteConfirm')} onConfirm={() => handleDelete(r.id)}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
-    </Space> },
-  ];
+  // Filter templates
+  const filtered = templates.filter(tmpl => {
+    if (filterCategory && tmpl.category !== filterCategory) return false;
+    if (searchText && !tmpl.name.toLowerCase().includes(searchText.toLowerCase()) && !(tmpl.match_keywords || '').toLowerCase().includes(searchText.toLowerCase())) return false;
+    return true;
+  });
+
+  // Group by category
+  const grouped: Record<string, any[]> = {};
+  filtered.forEach(tmpl => {
+    const cat = tmpl.category || 'general';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(tmpl);
+  });
+
+  const renderConfigPreview = (configTemplate: string) => {
+    try {
+      const obj = JSON.parse(configTemplate);
+      if (obj.command) return <code style={{ fontSize: 11, background: 'var(--ant-color-bg-spotlight, #f5f5f5)', padding: '2px 6px', borderRadius: 4 }}>{obj.command}</code>;
+      if (obj.url) return <code style={{ fontSize: 11, background: 'var(--ant-color-bg-spotlight, #f5f5f5)', padding: '2px 6px', borderRadius: 4 }}>{obj.method || 'GET'} {obj.url}</code>;
+      return <code style={{ fontSize: 11 }}>{JSON.stringify(obj).slice(0, 60)}</code>;
+    } catch { return <code style={{ fontSize: 11 }}>{configTemplate.slice(0, 60)}</code>; }
+  };
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}><Button type="primary" icon={<PlusOutlined />} onClick={() => showModal()}>{t('addTemplate')}</Button></div>
-      <Table dataSource={templates} columns={columns} rowKey="id" loading={loading} size="small" pagination={{ pageSize: 15 }} />
+      {/* Header with filters */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <Space wrap>
+          <Input.Search
+            placeholder={t('searchKnowledge')}
+            style={{ width: 220 }}
+            onSearch={setSearchText}
+            onChange={e => !e.target.value && setSearchText('')}
+            allowClear
+          />
+          <Select
+            allowClear
+            placeholder={t('category')}
+            style={{ width: 130 }}
+            onChange={setFilterCategory}
+            options={Object.entries(categoryConfig).map(([k, v]) => ({ label: <span>{v.icon} {t(k)}</span>, value: k }))}
+          />
+        </Space>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => showModal()}>{t('addTemplate')}</Button>
+      </div>
 
-      <Modal title={editing ? t('editTemplate') : t('addTemplate')} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={() => form.submit()} width={650} destroyOnClose>
+      {/* Stats summary */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Col span={6}>
+          <Card size="small" bordered={false}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#999' }}>{t('totalAlerts')}</span>
+              <Badge count={templates.length} style={{ backgroundColor: '#1890ff' }} />
+            </div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" bordered={false}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#999' }}>{t('active')}</span>
+              <Badge count={templates.filter(t => t.is_active).length} style={{ backgroundColor: '#52c41a' }} />
+            </div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" bordered={false}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#999' }}>{t('autoExecute')}</span>
+              <Badge count={templates.filter(t => !t.requires_approval).length} style={{ backgroundColor: '#faad14' }} />
+            </div>
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card size="small" bordered={false}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#999' }}>{t('builtIn')}</span>
+              <Badge count={8} style={{ backgroundColor: '#722ed1' }} />
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Card grid grouped by category */}
+      {Object.entries(grouped).length === 0 && <Empty description={t('noData')} />}
+
+      {Object.entries(grouped).map(([cat, items]) => {
+        const cfg = categoryConfig[cat] || categoryConfig.general;
+        return (
+          <div key={cat} style={{ marginBottom: 20 }}>
+            <Divider orientation="left" style={{ marginTop: 0, marginBottom: 12, fontSize: 14, color: cfg.color }}>
+              {cfg.icon} {t(cat)} ({items.length})
+            </Divider>
+            <Row gutter={[12, 12]}>
+              {items.map(tmpl => {
+                const rate = getSuccessRate(tmpl.success_rate);
+                const risk = riskConfig[tmpl.risk_level] || riskConfig.medium;
+                const isActive = tmpl.is_active;
+                return (
+                  <Col key={tmpl.id} xs={24} sm={12} md={8} lg={6}>
+                    <Card
+                      size="small"
+                      hoverable
+                      style={{
+                        borderColor: isActive ? undefined : '#d9d9d9',
+                        opacity: isActive ? 1 : 0.65,
+                        borderLeft: `3px solid ${cfg.color}`,
+                      }}
+                      bodyStyle={{ padding: '12px 14px' }}
+                    >
+                      {/* Title row */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tmpl.name}</div>
+                          {tmpl.description && <div style={{ fontSize: 11, color: '#999', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tmpl.description}</div>}
+                        </div>
+                        <Space size={4}>
+                          <Tooltip title={t('detail')}><Button size="small" type="text" icon={<EyeOutlined />} onClick={() => showDetail(tmpl)} /></Tooltip>
+                          <Tooltip title={t('editTemplate')}><Button size="small" type="text" icon={<EditOutlined />} onClick={() => showModal(tmpl)} /></Tooltip>
+                          <Popconfirm title={t('deleteConfirm')} onConfirm={() => handleDelete(tmpl.id)}>
+                            <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+                          </Popconfirm>
+                        </Space>
+                      </div>
+
+                      {/* Config preview */}
+                      <div style={{ marginBottom: 8 }}>
+                        {renderConfigPreview(tmpl.config_template)}
+                      </div>
+
+                      {/* Tags row */}
+                      <div style={{ marginBottom: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        <Tag color={cfg.color} style={{ margin: 0 }}>{t(cat)}</Tag>
+                        <Tag style={{ margin: 0 }}>{tmpl.action_type}</Tag>
+                        <Tag color={risk.color} style={{ margin: 0 }}>{risk.label}</Tag>
+                        {!tmpl.requires_approval && <Tag color="green" style={{ margin: 0 }}>⚡ {t('autoExecute')}</Tag>}
+                      </div>
+
+                      {/* Match keywords */}
+                      {tmpl.match_keywords && (
+                        <div style={{ marginBottom: 6 }}>
+                          {tmpl.match_keywords.split(',').slice(0, 4).map((kw: string) => (
+                            <Tag key={kw} style={{ fontSize: 10, margin: '0 2px 2px 0' }}>{kw.trim()}</Tag>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Success rate bar */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <Progress
+                          percent={rate}
+                          size="small"
+                          strokeColor={rate >= 80 ? '#52c41a' : rate >= 50 ? '#faad14' : '#ff4d4f'}
+                          style={{ flex: 1, marginBottom: 0 }}
+                          format={() => ''}
+                        />
+                        <span style={{ fontSize: 11, color: '#999', whiteSpace: 'nowrap' }}>
+                          {tmpl.success_rate} · {t('usageCount')}: {tmpl.usage_count || 0}
+                        </span>
+                      </div>
+                    </Card>
+                  </Col>
+                );
+              })}
+            </Row>
+          </div>
+        );
+      })}
+
+      {/* Detail modal */}
+      <Modal
+        title={viewing?.name}
+        open={detailOpen}
+        onCancel={() => setDetailOpen(false)}
+        footer={<Space><Button onClick={() => { setDetailOpen(false); showModal(viewing); }}>{t('editTemplate')}</Button><Button onClick={() => setDetailOpen(false)}>{t('close')}</Button></Space>}
+        width={600}
+      >
+        {viewing && (
+          <div>
+            <div style={{ marginBottom: 12 }}>
+              <Space wrap>
+                <Tag color={(categoryConfig[viewing.category] || categoryConfig.general).color}>{t(viewing.category)}</Tag>
+                <Tag>{viewing.action_type}</Tag>
+                <Tag color={(riskConfig[viewing.risk_level] || riskConfig.medium).color}>{(riskConfig[viewing.risk_level] || riskConfig.medium).label}</Tag>
+                {viewing.requires_approval ? <Tag color="orange">{t('requiresApproval')}</Tag> : <Tag color="green">⚡ {t('autoExecute')}</Tag>}
+                {viewing.is_active ? <Tag color="green">{t('active')}</Tag> : <Tag>{t('inactive')}</Tag>}
+              </Space>
+            </div>
+            {viewing.description && <p style={{ color: '#666', margin: '8px 0' }}>{viewing.description}</p>}
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('configTemplate')}</div>
+              <pre style={{ background: 'var(--ant-color-bg-spotlight, #f5f5f5)', padding: 12, borderRadius: 6, fontSize: 12, overflow: 'auto' }}>
+                {(() => { try { return JSON.stringify(JSON.parse(viewing.config_template), null, 2); } catch { return viewing.config_template; } })()}
+              </pre>
+            </div>
+
+            <Row gutter={16}>
+              <Col span={12}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('matchLabels')}</div>
+                {(() => { const ml = JSON.parse(viewing.match_labels || '{}'); return Object.keys(ml).length ? Object.entries(ml).map(([k, v]) => <Tag key={k}>{k}={v as string}</Tag>) : <span style={{ color: '#999' }}>-</span>; })()}
+              </Col>
+              <Col span={12}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('matchKeywords')}</div>
+                {viewing.match_keywords ? viewing.match_keywords.split(',').map((kw: string) => <Tag key={kw}>{kw.trim()}</Tag>) : <span style={{ color: '#999' }}>-</span>}
+              </Col>
+            </Row>
+
+            {viewing.match_severity && <div style={{ marginTop: 8 }}><span style={{ fontWeight: 600 }}>{t('matchSeverity')}: </span>{viewing.match_severity}</div>}
+
+            <Divider style={{ margin: '12px 0' }} />
+            <Row gutter={16}>
+              <Col span={8}><Statistic title={t('usageCount')} value={viewing.usage_count || 0} /></Col>
+              <Col span={8}><Statistic title={t('successRate')} value={viewing.success_rate || '0/0'} /></Col>
+              <Col span={8}>
+                <Progress type="circle" percent={getSuccessRate(viewing.success_rate)} size={60}
+                  strokeColor={getSuccessRate(viewing.success_rate) >= 80 ? '#52c41a' : '#faad14'} />
+              </Col>
+            </Row>
+          </div>
+        )}
+      </Modal>
+
+      {/* Create/Edit modal */}
+      <Modal title={editing ? t('editTemplate') : t('addTemplate')} open={modalOpen} onCancel={() => setModalOpen(false)} onOk={() => form.submit()} width={680} destroyOnClose>
         <Form form={form} onFinish={onFinish} layout="vertical">
-          <Space style={{ width: '100%' }} size="middle">
-            <Form.Item name="name" label={t('ruleName')} rules={[{ required: true }]} style={{ width: '50%' }}><Input /></Form.Item>
-            <Form.Item name="category" label={t('category')} style={{ width: '25%' }}>
-              <Select options={[{ label: t('restart'), value: 'restart' }, { label: t('disk'), value: 'disk' }, { label: t('network'), value: 'network' }, { label: t('service'), value: 'service' }, { label: t('general'), value: 'general' }]} />
-            </Form.Item>
-            <Form.Item name="action_type" label={t('actionType')} style={{ width: '25%' }}>
-              <Select options={[{ label: 'Shell', value: 'shell' }, { label: 'HTTP', value: 'http' }, { label: 'Webhook', value: 'webhook' }, { label: 'Script', value: 'script' }]} />
-            </Form.Item>
-          </Space>
+          <Row gutter={12}>
+            <Col span={12}><Form.Item name="name" label={t('ruleName')} rules={[{ required: true }]}><Input /></Form.Item></Col>
+            <Col span={6}>
+              <Form.Item name="category" label={t('category')}>
+                <Select options={Object.entries(categoryConfig).map(([k, v]) => ({ label: <span>{v.icon} {t(k)}</span>, value: k }))} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item name="action_type" label={t('actionType')}>
+                <Select options={[{ label: '🖥 Shell', value: 'shell' }, { label: '🌐 HTTP', value: 'http' }, { label: '🔗 Webhook', value: 'webhook' }, { label: '📜 Script', value: 'script' }]} />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item name="description" label={t('description')}><Input /></Form.Item>
-          <Form.Item name="config_template" label={t('configTemplate')} extra={t('placeholderHint')} rules={[{ required: true }]}>
-            <TextArea rows={3} placeholder='{"command": "systemctl restart {{service_name}}"}' />
+          <Form.Item name="config_template" label={t('configTemplate')} extra={<span style={{ color: '#1890ff' }}>💡 {t('placeholderHint')}</span>} rules={[{ required: true }]}>
+            <TextArea rows={4} placeholder={'{\n  "command": "systemctl restart {{service_name}}"\n}'} style={{ fontFamily: 'monospace' }} />
           </Form.Item>
-          <Form.Item name="match_labels" label={t('matchLabels')}>
+
+          <Divider orientation="left" style={{ fontSize: 12, margin: '8px 0 16px' }}>🎯 {t('matchRules') || '匹配规则'}</Divider>
+
+          <Form.Item label={t('matchLabels')}>
             <Form.List name="match_labels">
               {(fields, { add, remove }) => <>
                 {fields.map(({ key, name, ...rest }) => <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
-                  <Form.Item {...rest} name={[name, 'key']} rules={[{ required: true }]}><Input placeholder={t('labelKey')} style={{ width: 120 }} /></Form.Item>
-                  <Form.Item {...rest} name={[name, 'value']}><Input placeholder={t('labelValue')} style={{ width: 120 }} /></Form.Item>
-                  <Button onClick={() => remove(name)} danger size="small">{t('removeLabel')}</Button>
+                  <Form.Item {...rest} name={[name, 'key']} rules={[{ required: true }]}><Input placeholder={t('labelKey')} style={{ width: 130 }} /></Form.Item>
+                  <Form.Item {...rest} name={[name, 'value']}><Input placeholder={t('labelValue')} style={{ width: 130 }} /></Form.Item>
+                  <Button onClick={() => remove(name)} danger size="small" icon={<DeleteOutlined />} />
                 </Space>)}
                 <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>{t('addLabel')}</Button>
               </>}
             </Form.List>
           </Form.Item>
-          <Space style={{ width: '100%' }} size="middle">
-            <Form.Item name="match_severity" label={t('matchSeverity')} style={{ width: '50%' }}>
-              <Select mode="multiple" options={[{ label: 'critical', value: 'critical' }, { label: 'warning', value: 'warning' }, { label: 'info', value: 'info' }]} placeholder={t('matchAll')} allowClear />
-            </Form.Item>
-            <Form.Item name="match_keywords" label={t('matchKeywords')} style={{ width: '50%' }}>
-              <Input placeholder="关键词1,关键词2,..." />
-            </Form.Item>
-          </Space>
-          <Space style={{ width: '100%' }} size="middle">
-            <Form.Item name="risk_level" label={t('riskLevel')} style={{ width: '33%' }}>
-              <Select options={[{ label: t('low'), value: 'low' }, { label: t('medium'), value: 'medium' }, { label: 'critical', value: 'high' }]} />
-            </Form.Item>
-            <Form.Item name="requires_approval" label={t('requiresApproval')} valuePropName="checked" style={{ width: '33%' }}><Switch /></Form.Item>
-            <Form.Item name="is_active" label={t('isActive')} valuePropName="checked" style={{ width: '33%' }}><Switch /></Form.Item>
-          </Space>
+
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="match_severity" label={t('matchSeverity')}>
+                <Select mode="multiple" options={[{ label: '🔴 Critical', value: 'critical' }, { label: '🟠 High', value: 'high' }, { label: '🟡 Warning', value: 'warning' }, { label: '🔵 Info', value: 'info' }]} placeholder={t('matchAll')} allowClear />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="match_keywords" label={t('matchKeywords')}>
+                <Input placeholder="关键词1,关键词2,..." />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider orientation="left" style={{ fontSize: 12, margin: '8px 0 16px' }}>⚙️ {t('executionSettings') || '执行设置'}</Divider>
+
+          <Row gutter={12}>
+            <Col span={8}>
+              <Form.Item name="risk_level" label={t('riskLevel')}>
+                <Select options={[{ label: '🟢 Low', value: 'low' }, { label: '🟡 Medium', value: 'medium' }, { label: '🔴 High', value: 'high' }]} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="requires_approval" label={t('requiresApproval')} valuePropName="checked">
+                <Switch checkedChildren="🔒" unCheckedChildren="⚡" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="is_active" label={t('isActive')} valuePropName="checked">
+                <Switch checkedChildren="✅" unCheckedChildren="⏸" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Modal>
     </div>
