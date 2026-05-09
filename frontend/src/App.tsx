@@ -5,6 +5,7 @@ import {
   TranslationOutlined, BellOutlined, LogoutOutlined,
   ThunderboltOutlined, UserOutlined, BulbOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined,
+  SafetyOutlined, FileSearchOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ModelConfigPage from './pages/ModelConfig';
@@ -13,6 +14,8 @@ import Login from './pages/Login';
 import AlertDetail from './pages/AlertDetail';
 import NotificationChannels from './pages/NotificationChannels';
 import RemediationActions from './pages/RemediationActions';
+import AlertRules from './pages/AlertRules';
+import AuditLog from './pages/AuditLog';
 import UserManagement from './pages/UserManagement';
 import { LanguageProvider, useLanguage } from './services/i18n';
 import { ThemeProvider, useTheme } from './services/theme';
@@ -108,7 +111,11 @@ const AppContent = () => {
     { key: '/alerts', icon: <DashboardOutlined />, label: <Link to="/alerts">{t('dashboard')}</Link> },
     { key: '/notification-channels', icon: <BellOutlined />, label: <Link to="/notification-channels">{t('notificationChannels')}</Link> },
     { key: '/remediation-actions', icon: <ThunderboltOutlined />, label: <Link to="/remediation-actions">{t('aiAutoOps')}</Link> },
-    ...(userRole === 'admin' ? [{ key: '/users', icon: <UserOutlined />, label: <Link to="/users">{t('userManagement')}</Link> }] : []),
+    { key: '/alert-rules', icon: <SafetyOutlined />, label: <Link to="/alert-rules">{t('alertRules')}</Link> },
+    ...(userRole === 'admin' ? [
+      { key: '/audit-log', icon: <FileSearchOutlined />, label: <Link to="/audit-log">{t('auditLog')}</Link> },
+      { key: '/users', icon: <UserOutlined />, label: <Link to="/users">{t('userManagement')}</Link> },
+    ] : []),
     { key: '/config', icon: <SettingOutlined />, label: <Link to="/config">{t('models')}</Link> },
   ];
 
@@ -275,6 +282,8 @@ const AppContent = () => {
               <Route path="/alerts/:id" element={<AlertDetail />} />
               <Route path="/notification-channels" element={<NotificationChannels />} />
               <Route path="/remediation-actions" element={<RemediationActions />} />
+              <Route path="/alert-rules" element={<AlertRules />} />
+              <Route path="/audit-log" element={<AuditLog />} />
               <Route path="/users" element={<UserManagement />} />
               <Route path="/config" element={<ModelConfigPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />

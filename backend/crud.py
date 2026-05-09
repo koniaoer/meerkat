@@ -1,7 +1,10 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+import json
 import models, schemas
 from logger import logger
+
+# ─── Model Config ──────────────────────────────────────────────────────────
 
 def get_model_config(db: Session, config_id: int):
     return db.query(models.ModelConfig).filter(models.ModelConfig.id == config_id).first()
@@ -10,10 +13,8 @@ def get_model_configs(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.ModelConfig).offset(skip).limit(limit).all()
 
 def create_model_config(db: Session, config: schemas.ModelConfigCreate):
-    # If this one is set to active, deactivate others
     if config.is_active:
         db.query(models.ModelConfig).update({models.ModelConfig.is_active: False})
-    
     db_config = models.ModelConfig(**config.model_dump())
     db.add(db_config)
     db.commit()
@@ -24,18 +25,13 @@ def create_model_config(db: Session, config: schemas.ModelConfigCreate):
 def update_model_config(db: Session, config_id: int, config: schemas.ModelConfigCreate):
     db_config = get_model_config(db, config_id)
     if not db_config:
-        logger.warning("Model config not found for update: id=%d", config_id)
         return None
-    
     if config.is_active:
         db.query(models.ModelConfig).filter(models.ModelConfig.id != config_id).update({models.ModelConfig.is_active: False})
-    
     for key, value in config.model_dump().items():
         setattr(db_config, key, value)
-    
     db.commit()
     db.refresh(db_config)
-    logger.info("Updated model config: id=%d", config_id)
     return db_config
 
 def delete_model_config(db: Session, config_id: int):
@@ -43,13 +39,12 @@ def delete_model_config(db: Session, config_id: int):
     if db_config:
         db.delete(db_config)
         db.commit()
-        logger.info("Deleted model config: id=%d", config_id)
-    else:
-        logger.warning("Model config not found for deletion: id=%d", config_id)
     return db_config
 
 def get_active_model_config(db: Session):
     return db.query(models.ModelConfig).filter(models.ModelConfig.is_active == True).first()
+
+# ─── Alert ─────────────────────────────────────────────────────────────────
 
 def create_alert(db: Session, alert: schemas.AlertCreate, analysis_result: str = None, analysis: dict = None):
     db_alert = models.Alert(
@@ -70,14 +65,12 @@ def get_alerts(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Alert).order_by(models.Alert.created_at.desc()).offset(skip).limit(limit).all()
 
 def get_alert_by_fingerprint(db: Session, fingerprint: str):
-    """Find a firing alert with same fingerprint (for dedup/resolved handling)"""
     return db.query(models.Alert).filter(
         models.Alert.fingerprint == fingerprint,
         models.Alert.status == "firing"
     ).first()
 
 def resolve_alert(db: Session, alert_id: int):
-    """Mark alert as resolved"""
     db_alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
     if db_alert:
         db_alert.status = "resolved"
@@ -87,7 +80,6 @@ def resolve_alert(db: Session, alert_id: int):
     return db_alert
 
 def acknowledge_alert(db: Session, alert_id: int, acknowledged_by: str):
-    """Acknowledge an alert"""
     db_alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
     if db_alert:
         db_alert.acknowledged = True
@@ -98,7 +90,6 @@ def acknowledge_alert(db: Session, alert_id: int, acknowledged_by: str):
     return db_alert
 
 def silence_alert(db: Session, alert_id: int, duration_minutes: int):
-    """Silence an alert for given duration"""
     db_alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
     if db_alert:
         db_alert.silenced_until = datetime.utcnow() + timedelta(minutes=duration_minutes)
@@ -107,7 +98,6 @@ def silence_alert(db: Session, alert_id: int, duration_minutes: int):
     return db_alert
 
 def get_alert_stats(db: Session):
-    """Get alert statistics"""
     alerts = db.query(models.Alert).all()
     return {
         "total": len(alerts),
@@ -118,7 +108,6 @@ def get_alert_stats(db: Session):
     }
 
 def get_alerts_with_filters(db: Session, status: str = None, severity: str = None, acknowledged: bool = None, skip: int = 0, limit: int = 100):
-    """Get alerts with filters"""
     query = db.query(models.Alert)
     if status:
         query = query.filter(models.Alert.status == status)
@@ -128,7 +117,8 @@ def get_alerts_with_filters(db: Session, status: str = None, severity: str = Non
         query = query.filter(models.Alert.acknowledged == acknowledged)
     return query.order_by(models.Alert.created_at.desc()).offset(skip).limit(limit).all()
 
-# User CRUD
+# ─── User ──────────────────────────────────────────────────────────────────
+
 def get_user_by_username(db: Session, username: str):
     return db.query(models.User).filter(models.User.username == username).first()
 
@@ -166,7 +156,8 @@ def delete_user(db: Session, user_id: int):
 def count_users(db: Session):
     return db.query(models.User).count()
 
-# NotificationChannel CRUD
+# ─── Notification Channel ──────────────────────────────────────────────────
+
 def get_notification_channels(db: Session):
     return db.query(models.NotificationChannel).all()
 
@@ -198,44 +189,8 @@ def delete_notification_channel(db: Session, channel_id: int):
         db.delete(db_channel)
         db.commit()
 
-# DingTalk Config CRUD
-def get_dingtalk_configs(db: Session):
-    return db.query(models.DingTalkConfig).all()
+# ─── Remediation Action ────────────────────────────────────────────────────
 
-def create_dingtalk_config(db: Session, config: schemas.DingTalkConfigCreate):
-    db_config = models.DingTalkConfig(**config.model_dump())
-    db.add(db_config)
-    db.commit()
-    db.refresh(db_config)
-    logger.info("Created DingTalk config: id=%d", db_config.id)
-    return db_config
-
-def update_dingtalk_config(db: Session, config_id: int, config: schemas.DingTalkConfigCreate):
-    db_config = db.query(models.DingTalkConfig).filter(models.DingTalkConfig.id == config_id).first()
-    if db_config:
-        for key, value in config.model_dump().items():
-            setattr(db_config, key, value)
-        db.commit()
-        db.refresh(db_config)
-        logger.info("Updated DingTalk config: id=%d", config_id)
-    else:
-        logger.warning("DingTalk config not found for update: id=%d", config_id)
-    return db_config
-
-def delete_dingtalk_config(db: Session, config_id: int):
-    db_config = db.query(models.DingTalkConfig).filter(models.DingTalkConfig.id == config_id).first()
-    if db_config:
-        db.delete(db_config)
-        db.commit()
-        logger.info("Deleted DingTalk config: id=%d", config_id)
-    else:
-        logger.warning("DingTalk config not found for deletion: id=%d", config_id)
-    return db_config
-
-def get_active_dingtalk_config(db: Session):
-    return db.query(models.DingTalkConfig).filter(models.DingTalkConfig.is_active == True).first()
-
-# RemediationAction CRUD
 def create_remediation_action(db: Session, action: schemas.RemediationActionCreate, auto_approved: bool = False):
     db_action = models.RemediationAction(
         **action.model_dump(),
@@ -273,3 +228,104 @@ def update_action_status(db: Session, action_id: int, status: str, result: str =
     db.commit()
     db.refresh(db_action)
     return db_action
+
+# ─── Routing Rule ──────────────────────────────────────────────────────────
+
+def get_routing_rules(db: Session):
+    return db.query(models.AlertRoutingRule).order_by(models.AlertRoutingRule.priority.asc(), models.AlertRoutingRule.created_at.desc()).all()
+
+def get_routing_rule(db: Session, rule_id: int):
+    return db.query(models.AlertRoutingRule).filter(models.AlertRoutingRule.id == rule_id).first()
+
+def create_routing_rule(db: Session, rule: schemas.RoutingRuleCreate):
+    db_rule = models.AlertRoutingRule(**rule.model_dump())
+    db.add(db_rule)
+    db.commit()
+    db.refresh(db_rule)
+    logger.info("Created routing rule: id=%d, name=%s", db_rule.id, rule.name)
+    return db_rule
+
+def update_routing_rule(db: Session, rule_id: int, rule: schemas.RoutingRuleCreate):
+    db_rule = get_routing_rule(db, rule_id)
+    if not db_rule:
+        return None
+    for key, value in rule.model_dump().items():
+        setattr(db_rule, key, value)
+    db.commit()
+    db.refresh(db_rule)
+    return db_rule
+
+def delete_routing_rule(db: Session, rule_id: int):
+    db_rule = get_routing_rule(db, rule_id)
+    if db_rule:
+        db.delete(db_rule)
+        db.commit()
+    return db_rule
+
+def get_active_routing_rules(db: Session):
+    return db.query(models.AlertRoutingRule).filter(
+        models.AlertRoutingRule.is_active == True
+    ).order_by(models.AlertRoutingRule.priority.asc()).all()
+
+# ─── Suppression Rule ──────────────────────────────────────────────────────
+
+def get_suppression_rules(db: Session):
+    return db.query(models.AlertSuppressionRule).order_by(models.AlertSuppressionRule.created_at.desc()).all()
+
+def get_suppression_rule(db: Session, rule_id: int):
+    return db.query(models.AlertSuppressionRule).filter(models.AlertSuppressionRule.id == rule_id).first()
+
+def create_suppression_rule(db: Session, rule: schemas.SuppressionRuleCreate):
+    db_rule = models.AlertSuppressionRule(**rule.model_dump())
+    db.add(db_rule)
+    db.commit()
+    db.refresh(db_rule)
+    logger.info("Created suppression rule: id=%d, name=%s", db_rule.id, rule.name)
+    return db_rule
+
+def update_suppression_rule(db: Session, rule_id: int, rule: schemas.SuppressionRuleCreate):
+    db_rule = get_suppression_rule(db, rule_id)
+    if not db_rule:
+        return None
+    for key, value in rule.model_dump().items():
+        setattr(db_rule, key, value)
+    db.commit()
+    db.refresh(db_rule)
+    return db_rule
+
+def delete_suppression_rule(db: Session, rule_id: int):
+    db_rule = get_suppression_rule(db, rule_id)
+    if db_rule:
+        db.delete(db_rule)
+        db.commit()
+    return db_rule
+
+def get_active_suppression_rules(db: Session):
+    return db.query(models.AlertSuppressionRule).filter(
+        models.AlertSuppressionRule.is_active == True
+    ).all()
+
+# ─── Audit Log ─────────────────────────────────────────────────────────────
+
+def create_audit_log(db: Session, username: str = None, user_id: int = None,
+                     action: str = "", resource_type: str = "",
+                     resource_id: int = None, detail: str = None,
+                     ip_address: str = None):
+    db_log = models.AuditLog(
+        user_id=user_id, username=username, action=action,
+        resource_type=resource_type, resource_id=resource_id,
+        detail=detail, ip_address=ip_address,
+    )
+    db.add(db_log)
+    db.commit()
+    db.refresh(db_log)
+    return db_log
+
+def get_audit_logs(db: Session, skip: int = 0, limit: int = 100,
+                   action: str = None, resource_type: str = None):
+    query = db.query(models.AuditLog)
+    if action:
+        query = query.filter(models.AuditLog.action == action)
+    if resource_type:
+        query = query.filter(models.AuditLog.resource_type == resource_type)
+    return query.order_by(models.AuditLog.created_at.desc()).offset(skip).limit(limit).all()

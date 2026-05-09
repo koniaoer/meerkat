@@ -14,7 +14,6 @@ class ModelConfigCreate(ModelConfigBase):
 
 class ModelConfig(ModelConfigBase):
     id: int
-
     class Config:
         from_attributes = True
 
@@ -28,7 +27,6 @@ class DingTalkConfigCreate(DingTalkConfigBase):
 
 class DingTalkConfig(DingTalkConfigBase):
     id: int
-
     class Config:
         from_attributes = True
 
@@ -57,7 +55,6 @@ class Alert(AlertBase):
     acknowledged_at: Optional[datetime] = None
     silenced_until: Optional[datetime] = None
     created_at: datetime
-
     class Config:
         from_attributes = True
 
@@ -73,7 +70,6 @@ class AlertStats(BaseModel):
     acknowledged: int
     by_severity: Dict[str, int]
 
-# Prometheus Alertmanager structure
 class PrometheusAlert(BaseModel):
     status: str
     labels: Dict[str, str]
@@ -95,7 +91,6 @@ class PrometheusWebhook(BaseModel):
     groupKey: str
     truncatedAlerts: int = 0
 
-# User schemas
 class UserCreate(BaseModel):
     username: str
     password: str
@@ -107,21 +102,20 @@ class UserResponse(BaseModel):
     role: str = "viewer"
     is_active: bool
     created_at: datetime
-
     class Config:
         from_attributes = True
 
 class UserUpdate(BaseModel):
     display_name: Optional[str] = None
-    role: Optional[str] = None  # admin / operator / viewer
+    role: Optional[str] = None
     is_active: Optional[bool] = None
-    password: Optional[str] = None  # optional password change
+    password: Optional[str] = None
 
 class UserCreateByAdmin(BaseModel):
     username: str
     password: str
     display_name: Optional[str] = None
-    role: str = "viewer"  # default role for new users
+    role: str = "viewer"
 
 class Token(BaseModel):
     access_token: str
@@ -134,11 +128,10 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
-# NotificationChannel schemas
 class NotificationChannelCreate(BaseModel):
-    channel_type: str  # dingtalk/wechat/slack/email/webhook
+    channel_type: str
     name: str
-    config: str  # JSON string
+    config: str
     is_active: bool = True
 
 class NotificationChannelResponse(BaseModel):
@@ -148,17 +141,15 @@ class NotificationChannelResponse(BaseModel):
     config: str
     is_active: bool
     created_at: datetime
-
     class Config:
         from_attributes = True
 
-# Remediation Action schemas
 class RemediationActionCreate(BaseModel):
     alert_id: int
-    action_type: str  # shell/http/webhook/script
+    action_type: str
     name: str
     description: str
-    config: str  # JSON string
+    config: str
     risk_level: str = "medium"
 
 class RemediationActionResponse(BaseModel):
@@ -175,10 +166,73 @@ class RemediationActionResponse(BaseModel):
     approved_by: Optional[str] = None
     executed_at: Optional[datetime] = None
     created_at: datetime
-
     class Config:
         from_attributes = True
 
 class ActionApproval(BaseModel):
-    approved: bool  # True=approve, False=reject
+    approved: bool
     approved_by: str = "admin"
+
+# ─── Routing Rule ─────────────────────────────────────────────────────────
+class RoutingRuleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+    priority: int = 0
+    match_labels: str = "{}"
+    match_severity: Optional[str] = None
+    channel_ids: str = "[]"
+
+class RoutingRuleResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    is_active: bool
+    priority: int
+    match_labels: str
+    match_severity: Optional[str] = None
+    channel_ids: str
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── Suppression Rule ──────────────────────────────────────────────────────
+class SuppressionRuleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+    match_labels: str = "{}"
+    match_severity: Optional[str] = None
+    suppression_type: str = "label"
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    frequency_minutes: Optional[int] = None
+
+class SuppressionRuleResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    is_active: bool
+    match_labels: str
+    match_severity: Optional[str] = None
+    suppression_type: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    frequency_minutes: Optional[int] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── Audit Log ─────────────────────────────────────────────────────────────
+class AuditLogResponse(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    action: str
+    resource_type: str
+    resource_id: Optional[int] = None
+    detail: Optional[str] = None
+    ip_address: Optional[str] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True

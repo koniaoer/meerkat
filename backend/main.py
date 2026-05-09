@@ -8,6 +8,8 @@ import json
 
 import models, schemas, crud, ai_service
 from alert_dedup import alert_dedup, ai_rate_limiter
+from alert_router import route_alert
+from alert_suppressor import should_suppress
 from auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, require_auth, encrypt_value, decrypt_value,
@@ -377,23 +379,22 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
     # Get all active notification channels
     active_channels = crud.get_active_notification_channels(db)
 
-    # Clean expired dedup cache periodically
-    alert_dedup.clear_expired()
-
-    # Prepare channel configs for NotificationManager
-    channel_list = []
+    # Build channel lookup: id -> channel dict (with decrypted config)
+    channel_map = {}
     for ch in active_channels:
         config_dict = json.loads(ch.config) if isinstance(ch.config, str) else ch.config
-        # Decrypt sensitive fields
         sensitive_keys = ["api_key", "secret", "password", "smtp_password"]
         for key in sensitive_keys:
             if key in config_dict:
                 config_dict[key] = decrypt_value(str(config_dict[key]))
-        channel_list.append({
+        channel_map[ch.id] = {
             "channel_type": ch.channel_type,
             "name": ch.name,
             "config": config_dict,
-        })
+        }
+
+    # Clean expired dedup cache periodically
+    alert_dedup.clear_expired()
 
     results = []
     for alert in webhook_data.alerts:
@@ -406,7 +407,7 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
             existing = crud.get_alert_by_fingerprint(db, fingerprint)
             if existing:
                 crud.resolve_alert(db, existing.id)
-                # Send resolved notification via all channels
+                # Send resolved notification via all active channels
                 resolved_analysis = {
                     "summary": f"✅ 告警已恢复: {existing.alert_name}",
                     "root_cause": "",
@@ -414,8 +415,9 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
                     "severity": "info"
                 }
                 # Use NotificationManager if channels configured
-                if channel_list:
-                    await notification_manager.dispatch(alert.model_dump(), resolved_analysis, channel_list)
+                all_channels = list(channel_map.values())
+                if all_channels:
+                    await notification_manager.dispatch(alert.model_dump(), resolved_analysis, all_channels)
                 # Save resolved alert record
                 alert_create = schemas.AlertCreate(
                     alert_name=alert.labels.get("alertname", "Unknown"),
@@ -432,6 +434,32 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
 
         # Check for duplicate (dedup)
         is_dup = alert_dedup.is_duplicate(fingerprint)
+
+        # ─── Suppression check ────────────────────────────────────────
+        alert_labels = alert.labels
+        alert_sev = alert.labels.get("severity", "info")
+        suppressed, suppress_reason = should_suppress(alert_labels, alert_sev, fingerprint, db)
+
+        if suppressed:
+            logger.info("Alert %s suppressed: %s", fingerprint, suppress_reason)
+            # Still save to DB but skip AI and notification
+            alert_create = schemas.AlertCreate(
+                alert_name=alert.labels.get("alertname", "Unknown"),
+                status=alert_status,
+                severity=alert_sev,
+                summary=alert.annotations.get("summary", "No summary"),
+                description=alert.annotations.get("description", "No description"),
+                raw_data=json.dumps(alert.model_dump()),
+                fingerprint=fingerprint,
+            )
+            analysis = {"summary": f"已抑制: {suppress_reason}", "root_cause": "", "suggestion": "", "severity": "info"}
+            db_alert = crud.create_alert(db, alert_create, analysis_result=json.dumps(analysis, ensure_ascii=False), analysis=analysis)
+            crud.create_audit_log(db, action="alert.suppressed", resource_type="alert", resource_id=db_alert.id,
+                                  detail=json.dumps({"fingerprint": fingerprint, "reason": suppress_reason}, ensure_ascii=False))
+            results.append(db_alert)
+            continue
+        # ─── End suppression check ────────────────────────────────────
+
         if is_dup:
             cached = alert_dedup.get_cached_analysis(fingerprint)
             if cached:
@@ -508,8 +536,18 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
                             result=json.dumps({"success": False, "output": str(e)})
                         )
 
-        # Send notifications via NotificationManager
+        # Send notifications via NotificationManager (with routing)
         if should_notify:
+            # ─── Routing: match alert to target channels ─────────────
+            routed_ids = route_alert(alert.labels, alert.labels.get("severity", "info"), db)
+            if routed_ids is not None:
+                # Use routed channels
+                channel_list = [channel_map[cid] for cid in routed_ids if cid in channel_map]
+            else:
+                # No routing rule matched — use all active channels (default)
+                channel_list = list(channel_map.values())
+            # ─── End routing ──────────────────────────────────────────
+
             if channel_list:
                 await notification_manager.dispatch(alert.model_dump(), analysis, channel_list)
 
@@ -553,6 +591,8 @@ def acknowledge_alert(alert_id: int, db: Session = Depends(get_db), _user: model
     result = crud.acknowledge_alert(db, alert_id, acknowledged_by=_user.username)
     if not result:
         raise HTTPException(status_code=404, detail="Alert not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="alert.acknowledge", resource_type="alert", resource_id=alert_id)
     logger.info("Alert %d acknowledged", alert_id)
     return result
 
@@ -563,6 +603,9 @@ def silence_alert(alert_id: int, duration_minutes: int = Query(120, description=
     result = crud.silence_alert(db, alert_id, duration_minutes)
     if not result:
         raise HTTPException(status_code=404, detail="Alert not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="alert.silence", resource_type="alert", resource_id=alert_id,
+                          detail=json.dumps({"duration_minutes": duration_minutes}))
     logger.info("Alert %d silenced for %d minutes", alert_id, duration_minutes)
     return result
 
@@ -653,6 +696,79 @@ async def execute_remediation_action(action_id: int, db: Session = Depends(get_d
         crud.update_action_status(db, action_id, "failed", result=json.dumps({"success": False, "output": str(e)}))
 
     return crud.get_remediation_action(db, action_id)
+
+
+# ─── Routing Rule Endpoints ────────────────────────────────────────────────
+@app.get("/api/v1/routing-rules", response_model=List[schemas.RoutingRuleResponse])
+def list_routing_rules(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    return crud.get_routing_rules(db)
+
+@app.post("/api/v1/routing-rules", response_model=schemas.RoutingRuleResponse)
+def create_routing_rule(rule: schemas.RoutingRuleCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    db_rule = crud.create_routing_rule(db, rule)
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="routing_rule.create", resource_type="routing_rule", resource_id=db_rule.id,
+                          detail=json.dumps({"name": rule.name}, ensure_ascii=False))
+    return db_rule
+
+@app.put("/api/v1/routing-rules/{rule_id}", response_model=schemas.RoutingRuleResponse)
+def update_routing_rule(rule_id: int, rule: schemas.RoutingRuleCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    db_rule = crud.update_routing_rule(db, rule_id, rule)
+    if not db_rule:
+        raise HTTPException(status_code=404, detail="Routing rule not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="routing_rule.update", resource_type="routing_rule", resource_id=rule_id)
+    return db_rule
+
+@app.delete("/api/v1/routing-rules/{rule_id}")
+def delete_routing_rule(rule_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    db_rule = crud.delete_routing_rule(db, rule_id)
+    if not db_rule:
+        raise HTTPException(status_code=404, detail="Routing rule not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="routing_rule.delete", resource_type="routing_rule", resource_id=rule_id)
+    return {"status": "deleted"}
+
+# ─── Suppression Rule Endpoints ────────────────────────────────────────────
+@app.get("/api/v1/suppression-rules", response_model=List[schemas.SuppressionRuleResponse])
+def list_suppression_rules(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    return crud.get_suppression_rules(db)
+
+@app.post("/api/v1/suppression-rules", response_model=schemas.SuppressionRuleResponse)
+def create_suppression_rule(rule: schemas.SuppressionRuleCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    db_rule = crud.create_suppression_rule(db, rule)
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="suppression_rule.create", resource_type="suppression_rule", resource_id=db_rule.id,
+                          detail=json.dumps({"name": rule.name}, ensure_ascii=False))
+    return db_rule
+
+@app.put("/api/v1/suppression-rules/{rule_id}", response_model=schemas.SuppressionRuleResponse)
+def update_suppression_rule(rule_id: int, rule: schemas.SuppressionRuleCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    db_rule = crud.update_suppression_rule(db, rule_id, rule)
+    if not db_rule:
+        raise HTTPException(status_code=404, detail="Suppression rule not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="suppression_rule.update", resource_type="suppression_rule", resource_id=rule_id)
+    return db_rule
+
+@app.delete("/api/v1/suppression-rules/{rule_id}")
+def delete_suppression_rule(rule_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    db_rule = crud.delete_suppression_rule(db, rule_id)
+    if not db_rule:
+        raise HTTPException(status_code=404, detail="Suppression rule not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="suppression_rule.delete", resource_type="suppression_rule", resource_id=rule_id)
+    return {"status": "deleted"}
+
+# ─── Audit Log Endpoints ───────────────────────────────────────────────────
+@app.get("/api/v1/audit-logs", response_model=List[schemas.AuditLogResponse])
+def list_audit_logs(
+    skip: int = 0, limit: int = 100,
+    action: Optional[str] = Query(None),
+    resource_type: Optional[str] = Query(None),
+    db: Session = Depends(get_db), _user: models.User = Depends(require_role("admin")),
+):
+    return crud.get_audit_logs(db, skip=skip, limit=limit, action=action, resource_type=resource_type)
 
 
 if __name__ == "__main__":

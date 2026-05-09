@@ -69,4 +69,19 @@ export const getRemediationAction = (id: number) => api.get(`/remediation-action
 export const approveRemediationAction = (id: number, approved: boolean) => api.put(`/remediation-actions/${id}/approve`, { approved, approved_by: 'admin' });
 export const executeRemediationAction = (id: number) => api.post(`/remediation-actions/${id}/execute`);
 
+// Routing Rules
+export const getRoutingRules = () => api.get('/routing-rules');
+export const createRoutingRule = (data: any) => api.post('/routing-rules', data);
+export const updateRoutingRule = (id: number, data: any) => api.put(`/routing-rules/${id}`, data);
+export const deleteRoutingRule = (id: number) => api.delete(`/routing-rules/${id}`);
+
+// Suppression Rules
+export const getSuppressionRules = () => api.get('/suppression-rules');
+export const createSuppressionRule = (data: any) => api.post('/suppression-rules', data);
+export const updateSuppressionRule = (id: number, data: any) => api.put(`/suppression-rules/${id}`, data);
+export const deleteSuppressionRule = (id: number) => api.delete(`/suppression-rules/${id}`);
+
+// Audit Logs
+export const getAuditLogs = (params?: any) => api.get('/audit-logs', { params });
+
 export default api;

@@ -1,10 +1,10 @@
 from sqlalchemy import Column, Integer, String, Boolean, Text, DateTime
 from datetime import datetime
 from database import Base
+import json
 
 class ModelConfig(Base):
     __tablename__ = "model_configs"
-
     id = Column(Integer, primary_key=True, index=True)
     provider_name = Column(String, index=True)
     api_key = Column(String)
@@ -14,15 +14,13 @@ class ModelConfig(Base):
 
 class DingTalkConfig(Base):
     __tablename__ = "dingtalk_configs"
-
     id = Column(Integer, primary_key=True, index=True)
     webhook_url = Column(String)
-    secret = Column(String, nullable=True) # 用于加签
+    secret = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
 
 class Alert(Base):
     __tablename__ = "alerts"
-
     id = Column(Integer, primary_key=True, index=True)
     alert_name = Column(String, index=True)
     status = Column(String)
@@ -34,13 +32,13 @@ class Alert(Base):
     analysis_root_cause = Column(String, nullable=True)
     analysis_suggestion = Column(String, nullable=True)
     analysis_severity = Column(String, nullable=True)
-    raw_data = Column(Text)  # Store full JSON as string
-    fingerprint = Column(String, index=True, nullable=True)  # alert dedup key
-    resolved_at = Column(DateTime, nullable=True)  # when alert was resolved
-    acknowledged = Column(Boolean, default=False)  # whether acknowledged
-    acknowledged_by = Column(String, nullable=True)  # who acknowledged
-    acknowledged_at = Column(DateTime, nullable=True)  # when acknowledged
-    silenced_until = Column(DateTime, nullable=True)  # silence deadline
+    raw_data = Column(Text)
+    fingerprint = Column(String, index=True, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    acknowledged = Column(Boolean, default=False)
+    acknowledged_by = Column(String, nullable=True)
+    acknowledged_at = Column(DateTime, nullable=True)
+    silenced_until = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class User(Base):
@@ -48,33 +46,88 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-    display_name = Column(String, nullable=True)  # 显示名称
-    role = Column(String, default="viewer")  # admin / operator / viewer
+    display_name = Column(String, nullable=True)
+    role = Column(String, default="viewer")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class NotificationChannel(Base):
     __tablename__ = "notification_channels"
     id = Column(Integer, primary_key=True, index=True)
-    channel_type = Column(String)  # dingtalk/wechat/slack/email/webhook
+    channel_type = Column(String)
     name = Column(String)
-    config = Column(Text)  # JSON string with channel-specific config
+    config = Column(Text)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class RemediationAction(Base):
     __tablename__ = "remediation_actions"
-
     id = Column(Integer, primary_key=True, index=True)
-    alert_id = Column(Integer, index=True)  # Reference to the alert
-    action_type = Column(String)  # shell/http/webhook/script
-    name = Column(String)  # Human-readable name
-    description = Column(String)  # What this action does
-    config = Column(Text)  # JSON string with action-specific config
-    risk_level = Column(String, default="medium")  # low/medium/high
-    status = Column(String, default="pending")  # pending/approved/executing/completed/failed/rejected/timeout
-    result = Column(Text, nullable=True)  # JSON string with execution result
+    alert_id = Column(Integer, index=True)
+    action_type = Column(String)
+    name = Column(String)
+    description = Column(String)
+    config = Column(Text)
+    risk_level = Column(String, default="medium")
+    status = Column(String, default="pending")
+    result = Column(Text, nullable=True)
     auto_approved = Column(Boolean, default=False)
     approved_by = Column(String, nullable=True)
     executed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class AlertRoutingRule(Base):
+    __tablename__ = "alert_routing_rules"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    description = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    priority = Column(Integer, default=0)
+    match_labels = Column(Text, default="{}")
+    match_severity = Column(String, nullable=True)
+    channel_ids = Column(Text, default="[]")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def get_match_labels(self) -> dict:
+        try:
+            return json.loads(self.match_labels) if self.match_labels else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def get_channel_ids(self) -> list:
+        try:
+            return json.loads(self.channel_ids) if self.channel_ids else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+class AlertSuppressionRule(Base):
+    __tablename__ = "alert_suppression_rules"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    description = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    match_labels = Column(Text, default="{}")
+    match_severity = Column(String, nullable=True)
+    suppression_type = Column(String, default="label")
+    start_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime, nullable=True)
+    frequency_minutes = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def get_match_labels(self) -> dict:
+        try:
+            return json.loads(self.match_labels) if self.match_labels else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=True)
+    username = Column(String, nullable=True)
+    action = Column(String)
+    resource_type = Column(String)
+    resource_id = Column(Integer, nullable=True)
+    detail = Column(Text, nullable=True)
+    ip_address = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
