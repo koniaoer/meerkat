@@ -460,3 +460,140 @@ def update_escalation_event(db: Session, event_id: int, **kwargs):
 
 def get_active_escalation_events(db: Session):
     return db.query(models.EscalationEvent).filter(models.EscalationEvent.status == "active").all()
+
+# ─── Remediation Template ──────────────────────────────────────────────────
+
+def get_remediation_templates(db: Session, category: str = None):
+    query = db.query(models.RemediationTemplate)
+    if category:
+        query = query.filter(models.RemediationTemplate.category == category)
+    return query.order_by(models.RemediationTemplate.category, models.RemediationTemplate.name).all()
+
+def get_remediation_template(db: Session, template_id: int):
+    return db.query(models.RemediationTemplate).filter(models.RemediationTemplate.id == template_id).first()
+
+def create_remediation_template(db: Session, data: schemas.RemediationTemplateCreate):
+    db_template = models.RemediationTemplate(**data.model_dump())
+    db.add(db_template)
+    db.commit()
+    db.refresh(db_template)
+    return db_template
+
+def update_remediation_template(db: Session, template_id: int, data: schemas.RemediationTemplateCreate):
+    db_template = db.query(models.RemediationTemplate).filter(models.RemediationTemplate.id == template_id).first()
+    if not db_template:
+        return None
+    for k, v in data.model_dump().items():
+        setattr(db_template, k, v)
+    db.commit()
+    db.refresh(db_template)
+    return db_template
+
+def delete_remediation_template(db: Session, template_id: int):
+    db_template = db.query(models.RemediationTemplate).filter(models.RemediationTemplate.id == template_id).first()
+    if not db_template:
+        return None
+    db.delete(db_template)
+    db.commit()
+    return db_template
+
+def increment_template_usage(db: Session, template_id: int, success: bool):
+    """Update template usage count and success rate."""
+    db_template = db.query(models.RemediationTemplate).filter(models.RemediationTemplate.id == template_id).first()
+    if not db_template:
+        return
+    db_template.usage_count = (db_template.usage_count or 0) + 1
+    # Parse current success rate
+    try:
+        parts = db_template.success_rate.split("/")
+        completed = int(parts[0]) + (1 if success else 0)
+        total = int(parts[1]) + 1
+    except (ValueError, IndexError):
+        completed = 1 if success else 0
+        total = 1
+    db_template.success_rate = f"{completed}/{total}"
+    db.commit()
+
+def find_matching_templates(db: Session, labels: dict, severity: str, alert_name: str, summary: str):
+    """Find templates that auto-match the given alert."""
+    templates = db.query(models.RemediationTemplate).filter(
+        models.RemediationTemplate.is_active == True
+    ).all()
+    matched = []
+    for tmpl in templates:
+        score = 0
+        # Check label match
+        try:
+            match_labels = json.loads(tmpl.match_labels) if tmpl.match_labels else {}
+        except:
+            match_labels = {}
+        if match_labels:
+            if all(labels.get(k) == v for k, v in match_labels.items()):
+                score += 10
+            else:
+                continue  # Label mismatch = skip
+        # Check severity match
+        if tmpl.match_severity:
+            allowed = [s.strip() for s in tmpl.match_severity.split(",")]
+            if severity in allowed:
+                score += 5
+            elif match_labels:
+                continue  # Has label match but severity mismatch — still include but lower priority
+        # Check keyword match
+        if tmpl.match_keywords:
+            keywords = [k.strip().lower() for k in tmpl.match_keywords.split(",")]
+            text = f"{alert_name} {summary}".lower()
+            matched_keywords = [k for k in keywords if k in text]
+            score += len(matched_keywords) * 3
+            if not matched_keywords and not match_labels:
+                continue  # Only keyword match and nothing matched — skip
+        if score > 0:
+            matched.append((score, tmpl))
+    matched.sort(key=lambda x: x[0], reverse=True)
+    return [tmpl for _, tmpl in matched]
+
+def init_default_templates(db: Session):
+    """Seed default remediation templates if none exist."""
+    if db.query(models.RemediationTemplate).count() > 0:
+        return
+    defaults = [
+        {"name": "重启服务", "description": "通过 systemctl 重启指定服务", "category": "restart",
+         "action_type": "shell", "config_template": json.dumps({"command": "systemctl restart {{service_name}}"}, ensure_ascii=False),
+         "match_keywords": "服务不可用,service down,connection refused,服务异常",
+         "risk_level": "medium", "requires_approval": True},
+        {"name": "清理磁盘空间", "description": "清理 Docker 和系统临时文件释放磁盘空间", "category": "disk",
+         "action_type": "shell", "config_template": json.dumps({"command": "docker system prune -f && rm -rf /tmp/*"}, ensure_ascii=False),
+         "match_labels": json.dumps({"alertname": "DiskUsageHigh"}, ensure_ascii=False),
+         "match_keywords": "disk,disk full,磁盘,空间不足",
+         "risk_level": "medium", "requires_approval": True},
+        {"name": "清理日志文件", "description": "截断大于 100M 的日志文件", "category": "disk",
+         "action_type": "shell", "config_template": json.dumps({"command": "find /var/log -name '*.log' -size +100M -exec truncate -s 0 {} \\;"}, ensure_ascii=False),
+         "match_keywords": "disk,磁盘,log,日志过大",
+         "risk_level": "low", "requires_approval": False},
+        {"name": "重启 Pod", "description": "重启 Kubernetes 中指定命名空间的 Pod", "category": "restart",
+         "action_type": "shell", "config_template": json.dumps({"command": "kubectl delete pod -n {{namespace}} -l app={{app_name}}"}, ensure_ascii=False),
+         "match_keywords": "pod,pod crashloopbackoff,kubernetes,pod error",
+         "risk_level": "medium", "requires_approval": True},
+        {"name": "扩容 Deployment", "description": "增加 K8s Deployment 副本数", "category": "service",
+         "action_type": "shell", "config_template": json.dumps({"command": "kubectl scale deployment {{deployment_name}} -n {{namespace}} --replicas={{replicas}}"}, ensure_ascii=False),
+         "match_keywords": "高负载,high load,CPU,OOM,内存",
+         "risk_level": "high", "requires_approval": True},
+        {"name": "HTTP 健康检查", "description": "对目标 URL 发送 GET 请求检查状态", "category": "network",
+         "action_type": "http", "config_template": json.dumps({"url": "{{health_url}}", "method": "GET"}, ensure_ascii=False),
+         "match_keywords": "HTTP,502,503,504,timeout",
+         "risk_level": "low", "requires_approval": False},
+        {"name": "重启 Nginx", "description": "reload Nginx 配置", "category": "service",
+         "action_type": "shell", "config_template": json.dumps({"command": "nginx -s reload"}, ensure_ascii=False),
+         "match_labels": json.dumps({"job": "nginx"}, ensure_ascii=False),
+         "match_keywords": "nginx,502,503",
+         "risk_level": "low", "requires_approval": False},
+        {"name": "清理 Redis 缓存", "description": "清除 Redis 指定 key 的缓存", "category": "service",
+         "action_type": "shell", "config_template": json.dumps({"command": "redis-cli DEL {{key_pattern}}"}, ensure_ascii=False),
+         "match_keywords": "redis,缓存,cache",
+         "risk_level": "medium", "requires_approval": True},
+    ]
+    for d in defaults:
+        tmpl = models.RemediationTemplate(**d)
+        db.add(tmpl)
+    db.commit()
+    logger.info("Initialized %d default remediation templates", len(defaults))

@@ -11,6 +11,7 @@ from alert_dedup import alert_dedup, ai_rate_limiter
 from alert_router import route_alert
 from alert_suppressor import should_suppress
 from escalation_engine import match_escalation_policy, run_escalation_check
+from remediation_recommender import recommend_remediations
 from auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, require_auth, encrypt_value, decrypt_value,
@@ -68,6 +69,12 @@ async def lifespan(app):
                 logger.info("Migrated %d DingTalk configs to notification channels", len(legacy_configs))
         except Exception as e:
             logger.warning("DingTalk migration skipped: %s", e)
+
+        # Initialize default remediation templates
+        try:
+            crud.init_default_templates(db)
+        except Exception as e:
+            logger.warning("Template init skipped: %s", e)
 
     # ─── Background escalation checker ────────────────────────────────────
     import asyncio
@@ -575,6 +582,16 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
                             result=json.dumps({"success": False, "output": str(e)})
                         )
 
+        # ─── Template-based remediation recommendations ───────────────────────
+        if alert_status == "firing" and db_alert:
+            try:
+                template_actions = await recommend_remediations(db, db_alert, analysis, ai_service)
+                if template_actions:
+                    logger.info("Recommended %d remediation actions for alert %d", len(template_actions), db_alert.id)
+            except Exception as e:
+                logger.warning("Template recommendation failed: %s", e)
+        # ─── End template recommendations ────────────────────────────────────
+
         # Send notifications via NotificationManager (with routing)
         if should_notify:
             # ─── Routing: match alert to target channels ─────────────
@@ -903,6 +920,77 @@ def delete_escalation_policy(policy_id: int, db: Session = Depends(get_db), _use
 @app.get("/api/v1/escalation-events", response_model=List[schemas.EscalationEventResponse])
 def list_escalation_events(status: Optional[str] = Query(None), db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     return crud.get_escalation_events(db, status=status)
+
+# ─── Remediation Template Endpoints ────────────────────────────────────────
+@app.get("/api/v1/remediation-templates", response_model=List[schemas.RemediationTemplateResponse])
+def list_remediation_templates(category: Optional[str] = Query(None), db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    return crud.get_remediation_templates(db, category=category)
+
+@app.get("/api/v1/remediation-templates/{template_id}", response_model=schemas.RemediationTemplateResponse)
+def get_remediation_template(template_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    tmpl = crud.get_remediation_template(db, template_id)
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return tmpl
+
+@app.post("/api/v1/remediation-templates", response_model=schemas.RemediationTemplateResponse)
+def create_remediation_template(template: schemas.RemediationTemplateCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.create_remediation_template(db, template)
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="template.create", resource_type="remediation_template", resource_id=result.id,
+                          detail=json.dumps({"name": template.name}, ensure_ascii=False))
+    return result
+
+@app.put("/api/v1/remediation-templates/{template_id}", response_model=schemas.RemediationTemplateResponse)
+def update_remediation_template(template_id: int, template: schemas.RemediationTemplateCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.update_remediation_template(db, template_id, template)
+    if not result:
+        raise HTTPException(status_code=404, detail="Template not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="template.update", resource_type="remediation_template", resource_id=template_id)
+    return result
+
+@app.delete("/api/v1/remediation-templates/{template_id}")
+def delete_remediation_template(template_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.delete_remediation_template(db, template_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Template not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="template.delete", resource_type="remediation_template", resource_id=template_id)
+    return {"status": "deleted"}
+
+@app.post("/api/v1/remediation-templates/{template_id}/apply/{alert_id}", response_model=schemas.RemediationActionResponse)
+def apply_template_to_alert(template_id: int, alert_id: int, params: Optional[dict] = None, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    """Manually apply a template to an alert, filling placeholders."""
+    tmpl = crud.get_remediation_template(db, template_id)
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    from remediation_recommender import fill_template
+    raw = json.loads(alert.raw_data) if alert.raw_data else {}
+    labels = raw.get("labels", {})
+    context = {
+        "service_name": labels.get("service", labels.get("job", "")),
+        "namespace": labels.get("namespace", "default"),
+        "app_name": labels.get("app", ""),
+        "deployment_name": labels.get("deployment", ""),
+        "instance": labels.get("instance", ""),
+        **(params or {}),
+    }
+    filled_config = fill_template(tmpl.config_template, context)
+    action_create = schemas.RemediationActionCreate(
+        alert_id=alert_id, action_type=tmpl.action_type,
+        name=f"[模板] {tmpl.name}", description=tmpl.description or "",
+        config=filled_config, risk_level=tmpl.risk_level,
+    )
+    auto_approved = not tmpl.requires_approval
+    result = crud.create_remediation_action(db, action_create, auto_approved=auto_approved)
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="template.apply", resource_type="remediation_template", resource_id=template_id,
+                          detail=json.dumps({"alert_id": alert_id}, ensure_ascii=False))
+    return result
 
 
 if __name__ == "__main__":

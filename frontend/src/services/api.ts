@@ -98,4 +98,12 @@ export const updateEscalationPolicy = (id: number, data: any) => api.put(`/escal
 export const deleteEscalationPolicy = (id: number) => api.delete(`/escalation-policies/${id}`);
 export const getEscalationEvents = (params?: any) => api.get('/escalation-events', { params });
 
+// Remediation Templates
+export const getRemediationTemplates = (params?: any) => api.get('/remediation-templates', { params });
+export const getRemediationTemplate = (id: number) => api.get(`/remediation-templates/${id}`);
+export const createRemediationTemplate = (data: any) => api.post('/remediation-templates', data);
+export const updateRemediationTemplate = (id: number, data: any) => api.put(`/remediation-templates/${id}`, data);
+export const deleteRemediationTemplate = (id: number) => api.delete(`/remediation-templates/${id}`);
+export const applyTemplateToAlert = (templateId: number, alertId: number, params?: any) => api.post(`/remediation-templates/${templateId}/apply/${alertId}`, params);
+
 export default api;

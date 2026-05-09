@@ -7,6 +7,7 @@ import {
   MenuFoldOutlined, MenuUnfoldOutlined,
   SafetyOutlined, FileSearchOutlined,
   TeamOutlined, RiseOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ModelConfigPage from './pages/ModelConfig';
@@ -19,6 +20,7 @@ import AlertRules from './pages/AlertRules';
 import AuditLog from './pages/AuditLog';
 import OnCallSchedule from './pages/OnCallSchedule';
 import EscalationPolicyPage from './pages/EscalationPolicy';
+import RemediationTemplates from './pages/RemediationTemplates';
 import UserManagement from './pages/UserManagement';
 import { LanguageProvider, useLanguage } from './services/i18n';
 import { ThemeProvider, useTheme } from './services/theme';
@@ -114,6 +116,7 @@ const AppContent = () => {
     { key: '/alerts', icon: <DashboardOutlined />, label: <Link to="/alerts">{t('dashboard')}</Link> },
     { key: '/notification-channels', icon: <BellOutlined />, label: <Link to="/notification-channels">{t('notificationChannels')}</Link> },
     { key: '/remediation-actions', icon: <ThunderboltOutlined />, label: <Link to="/remediation-actions">{t('aiAutoOps')}</Link> },
+    { key: '/remediation-templates', icon: <ToolOutlined />, label: <Link to="/remediation-templates">{t('remediationTemplates')}</Link> },
     { key: '/alert-rules', icon: <SafetyOutlined />, label: <Link to="/alert-rules">{t('alertRules')}</Link> },
     { key: '/oncall', icon: <TeamOutlined />, label: <Link to="/oncall">{t('oncallSchedule')}</Link> },
     { key: '/escalation', icon: <RiseOutlined />, label: <Link to="/escalation">{t('escalationPolicy')}</Link> },
@@ -287,6 +290,7 @@ const AppContent = () => {
               <Route path="/alerts/:id" element={<AlertDetail />} />
               <Route path="/notification-channels" element={<NotificationChannels />} />
               <Route path="/remediation-actions" element={<RemediationActions />} />
+              <Route path="/remediation-templates" element={<RemediationTemplates />} />
               <Route path="/alert-rules" element={<AlertRules />} />
               <Route path="/oncall" element={<OnCallSchedule />} />
               <Route path="/escalation" element={<EscalationPolicyPage />} />

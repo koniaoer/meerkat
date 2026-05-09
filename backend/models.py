@@ -171,3 +171,21 @@ class EscalationEvent(Base):
     last_escalated_at = Column(DateTime, nullable=True)
     status = Column(String, default="active")  # active/acknowledged/resolved/expired
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class RemediationTemplate(Base):
+    __tablename__ = "remediation_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    description = Column(String, nullable=True)
+    category = Column(String, default="general")  # restart/disk/network/service/custom
+    action_type = Column(String, default="shell")  # shell/http/webhook/script
+    config_template = Column(Text, default="{}")  # JSON with {{placeholder}} variables
+    match_labels = Column(Text, default="{}")  # Auto-match: labels that trigger this template
+    match_severity = Column(String, nullable=True)  # Auto-match: severity filter
+    match_keywords = Column(String, nullable=True)  # Auto-match: keywords in alert name/summary
+    risk_level = Column(String, default="medium")
+    requires_approval = Column(Boolean, default=True)  # True=always need approval, False=auto-execute
+    usage_count = Column(Integer, default=0)  # Track how many times used
+    success_rate = Column(String, default="0")  # "completed/total" e.g. "8/10"
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

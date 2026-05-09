@@ -224,6 +224,25 @@ export const translations: Translation = {
   escalationEvents: { zh: '升级事件', en: 'Escalation Events' },
   active: { zh: '活跃', en: 'Active' },
   expired: { zh: '已过期', en: 'Expired' },
+  // Remediation Templates
+  remediationTemplates: { zh: '修复模板', en: 'Remediation Templates' },
+  category: { zh: '分类', en: 'Category' },
+  restart: { zh: '重启', en: 'Restart' },
+  disk: { zh: '磁盘', en: 'Disk' },
+  network: { zh: '网络', en: 'Network' },
+  service: { zh: '服务', en: 'Service' },
+  general: { zh: '通用', en: 'General' },
+  configTemplate: { zh: '配置模板', en: 'Config Template' },
+  matchKeywords: { zh: '匹配关键词', en: 'Match Keywords' },
+  requiresApproval: { zh: '需要审批', en: 'Requires Approval' },
+  autoExecute: { zh: '自动执行', en: 'Auto Execute' },
+  usageCount: { zh: '使用次数', en: 'Usage Count' },
+  successRate: { zh: '成功率', en: 'Success Rate' },
+  applyTemplate: { zh: '应用模板', en: 'Apply Template' },
+  addTemplate: { zh: '新增模板', en: 'Add Template' },
+  editTemplate: { zh: '编辑模板', en: 'Edit Template' },
+  placeholderHint: { zh: '用 {{变量名}} 作为占位符', en: 'Use {{variable}} as placeholder' },
+  builtIn: { zh: '内置', en: 'Built-in' },
 };
 
 interface LanguageContextType {

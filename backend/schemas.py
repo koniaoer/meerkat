@@ -310,3 +310,36 @@ class EscalationEventResponse(BaseModel):
     created_at: datetime
     class Config:
         from_attributes = True
+
+# ─── Remediation Template ──────────────────────────────────────────────────
+class RemediationTemplateCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category: str = "general"
+    action_type: str = "shell"
+    config_template: str = "{}"
+    match_labels: str = "{}"
+    match_severity: Optional[str] = None
+    match_keywords: Optional[str] = None
+    risk_level: str = "medium"
+    requires_approval: bool = True
+    is_active: bool = True
+
+class RemediationTemplateResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    category: str
+    action_type: str
+    config_template: str
+    match_labels: str
+    match_severity: Optional[str] = None
+    match_keywords: Optional[str] = None
+    risk_level: str
+    requires_approval: bool
+    usage_count: int
+    success_rate: str
+    is_active: bool
+    created_at: datetime
+    class Config:
+        from_attributes = True
