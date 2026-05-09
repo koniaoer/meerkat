@@ -107,4 +107,16 @@ export const updateRemediationTemplate = (id: number, data: any) => api.put(`/re
 export const deleteRemediationTemplate = (id: number) => api.delete(`/remediation-templates/${id}`);
 export const applyTemplateToAlert = (templateId: number, alertId: number, params?: any) => api.post(`/remediation-templates/${templateId}/apply/${alertId}`, params);
 
+// Knowledge Base
+export const getKnowledgeArticles = (params?: any) => api.get('/knowledge', { params });
+export const getKnowledgeArticle = (id: number) => api.get(`/knowledge/${id}`);
+export const createKnowledgeArticle = (data: any) => api.post('/knowledge', data);
+export const updateKnowledgeArticle = (id: number, data: any) => api.put(`/knowledge/${id}`, data);
+export const deleteKnowledgeArticle = (id: number) => api.delete(`/knowledge/${id}`);
+export const markArticleHelpful = (id: number) => api.post(`/knowledge/${id}/helpful`);
+
+// ChatOps
+export const sendChatMessage = (data: { message: string; session_id?: string; alert_id?: number }) => api.post('/chat', data);
+export const getChatHistory = (sessionId: string) => api.get(`/chat/${sessionId}`);
+
 export default api;

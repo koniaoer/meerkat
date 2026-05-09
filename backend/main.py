@@ -12,6 +12,7 @@ from alert_router import route_alert
 from alert_suppressor import should_suppress
 from escalation_engine import match_escalation_policy, run_escalation_check
 from remediation_recommender import recommend_remediations
+from chatops_engine import handle_chatops
 from auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, require_auth, encrypt_value, decrypt_value,
@@ -996,6 +997,59 @@ def apply_template_to_alert(template_id: int, alert_id: int, params: Optional[di
                           action="template.apply", resource_type="remediation_template", resource_id=template_id,
                           detail=json.dumps({"alert_id": alert_id}, ensure_ascii=False))
     return result
+
+# ─── Knowledge Article Endpoints ───────────────────────────────────────────
+@app.get("/api/v1/knowledge", response_model=List[schemas.KnowledgeArticleResponse])
+def list_knowledge_articles(category: Optional[str] = Query(None), search: Optional[str] = Query(None), alert_name: Optional[str] = Query(None), db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    return crud.get_knowledge_articles(db, category=category, search=search, alert_name=alert_name)
+
+@app.get("/api/v1/knowledge/{article_id}", response_model=schemas.KnowledgeArticleResponse)
+def get_knowledge_article(article_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    article = crud.get_knowledge_article(db, article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    crud.increment_article_view(db, article_id)
+    return article
+
+@app.post("/api/v1/knowledge", response_model=schemas.KnowledgeArticleResponse)
+def create_knowledge_article(article: schemas.KnowledgeArticleCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.create_knowledge_article(db, article, author=_user.username)
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="knowledge.create", resource_type="knowledge_article", resource_id=result.id)
+    return result
+
+@app.put("/api/v1/knowledge/{article_id}", response_model=schemas.KnowledgeArticleResponse)
+def update_knowledge_article(article_id: int, article: schemas.KnowledgeArticleCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.update_knowledge_article(db, article_id, article)
+    if not result:
+        raise HTTPException(status_code=404, detail="Article not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="knowledge.update", resource_type="knowledge_article", resource_id=article_id)
+    return result
+
+@app.delete("/api/v1/knowledge/{article_id}")
+def delete_knowledge_article(article_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    result = crud.delete_knowledge_article(db, article_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Article not found")
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="knowledge.delete", resource_type="knowledge_article", resource_id=article_id)
+    return {"status": "deleted"}
+
+@app.post("/api/v1/knowledge/{article_id}/helpful")
+def mark_article_helpful(article_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    crud.mark_article_helpful(db, article_id)
+    return {"status": "ok"}
+
+# ─── ChatOps Endpoints ─────────────────────────────────────────────────────
+@app.post("/api/v1/chat", response_model=schemas.ChatResponse)
+async def chat_endpoint(req: schemas.ChatRequest, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    """ChatOps endpoint — natural language alert operations + AI chat."""
+    return await handle_chatops(db, req.message, session_id=req.session_id, alert_id=req.alert_id, user=_user)
+
+@app.get("/api/v1/chat/{session_id}", response_model=List[schemas.ChatResponse])
+def get_chat_history(session_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    return crud.get_chat_history(db, session_id)
 
 
 if __name__ == "__main__":

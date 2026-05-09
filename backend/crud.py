@@ -655,3 +655,97 @@ def init_default_templates(db: Session):
         db.add(tmpl)
     db.commit()
     logger.info("Initialized %d default remediation templates", len(defaults))
+
+# ─── Knowledge Article ──────────────────────────────────────────────────────
+
+def get_knowledge_articles(db: Session, category: str = None, search: str = None, alert_name: str = None):
+    query = db.query(models.KnowledgeArticle).filter(models.KnowledgeArticle.is_published == True)
+    if category:
+        query = query.filter(models.KnowledgeArticle.category == category)
+    if alert_name:
+        query = query.filter(models.KnowledgeArticle.alert_name == alert_name)
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (models.KnowledgeArticle.title.ilike(search_term)) |
+            (models.KnowledgeArticle.content.ilike(search_term)) |
+            (models.KnowledgeArticle.tags.ilike(search_term))
+        )
+    return query.order_by(models.KnowledgeArticle.updated_at.desc()).limit(50).all()
+
+def get_knowledge_article(db: Session, article_id: int):
+    return db.query(models.KnowledgeArticle).filter(models.KnowledgeArticle.id == article_id).first()
+
+def create_knowledge_article(db: Session, data: schemas.KnowledgeArticleCreate, author: str = None):
+    article = models.KnowledgeArticle(**data.model_dump(), author=author)
+    db.add(article)
+    db.commit()
+    db.refresh(article)
+    return article
+
+def update_knowledge_article(db: Session, article_id: int, data: schemas.KnowledgeArticleCreate):
+    article = db.query(models.KnowledgeArticle).filter(models.KnowledgeArticle.id == article_id).first()
+    if not article:
+        return None
+    for k, v in data.model_dump().items():
+        setattr(article, k, v)
+    article.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(article)
+    return article
+
+def delete_knowledge_article(db: Session, article_id: int):
+    article = db.query(models.KnowledgeArticle).filter(models.KnowledgeArticle.id == article_id).first()
+    if not article:
+        return None
+    db.delete(article)
+    db.commit()
+    return article
+
+def increment_article_view(db: Session, article_id: int):
+    article = db.query(models.KnowledgeArticle).filter(models.KnowledgeArticle.id == article_id).first()
+    if article:
+        article.view_count = (article.view_count or 0) + 1
+        db.commit()
+
+def mark_article_helpful(db: Session, article_id: int):
+    article = db.query(models.KnowledgeArticle).filter(models.KnowledgeArticle.id == article_id).first()
+    if article:
+        article.helpful_count = (article.helpful_count or 0) + 1
+        db.commit()
+
+def find_articles_for_alert(db: Session, alert_name: str, severity: str = None):
+    """Find knowledge articles relevant to a given alert."""
+    query = db.query(models.KnowledgeArticle).filter(models.KnowledgeArticle.is_published == True)
+    # Direct match by alert_name
+    direct = query.filter(models.KnowledgeArticle.alert_name == alert_name).all()
+    # Keyword search in title/content
+    search_term = f"%{alert_name}%"
+    related = query.filter(
+        (models.KnowledgeArticle.title.ilike(search_term)) |
+        (models.KnowledgeArticle.content.ilike(search_term))
+    ).limit(5).all()
+    # Merge and dedup
+    seen = {a.id for a in direct}
+    results = list(direct)
+    for a in related:
+        if a.id not in seen:
+            results.append(a)
+            seen.add(a.id)
+    return results
+
+# ─── Chat Messages ──────────────────────────────────────────────────────────
+
+def get_chat_history(db: Session, session_id: str, limit: int = 20):
+    return db.query(models.ChatMessage).filter(
+        models.ChatMessage.session_id == session_id
+    ).order_by(models.ChatMessage.created_at.desc()).limit(limit).all()[::-1]
+
+def save_chat_message(db: Session, session_id: str, role: str, content: str,
+                      action_taken: str = None, alert_id: int = None):
+    msg = models.ChatMessage(session_id=session_id, role=role, content=content,
+                             action_taken=action_taken, alert_id=alert_id)
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return msg

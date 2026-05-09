@@ -264,6 +264,29 @@ export const translations: Translation = {
   last7d: { zh: '近7天', en: 'Last 7 days' },
   last30d: { zh: '近30天', en: 'Last 30 days' },
   noOncall: { zh: '暂无值班', en: 'No on-call' },
+  // Knowledge Base
+  knowledgeBase: { zh: '知识库', en: 'Knowledge Base' },
+  article: { zh: '文章', en: 'Article' },
+  runbook: { zh: 'Runbook', en: 'Runbook' },
+  troubleshoot: { zh: '排障指南', en: 'Troubleshoot' },
+  faq: { zh: 'FAQ', en: 'FAQ' },
+  postmortem: { zh: '复盘', en: 'Postmortem' },
+  helpful: { zh: '有帮助', en: 'Helpful' },
+  views: { zh: '阅读', en: 'Views' },
+  addArticle: { zh: '新增文章', en: 'Add Article' },
+  editArticle: { zh: '编辑文章', en: 'Edit Article' },
+  searchKnowledge: { zh: '搜索知识库...', en: 'Search knowledge...' },
+  // ChatOps
+  chatops: { zh: 'ChatOps', en: 'ChatOps' },
+  chatPlaceholder: { zh: '输入命令或提问... (如: 确认告警 #1, 统计, 当前值班)', en: 'Type command or question... (e.g.: ack alert #1, stats, on-call)' },
+  newChat: { zh: '新对话', en: 'New Chat' },
+  commandHint: { zh: '快捷命令', en: 'Quick Commands' },
+  ackCmd: { zh: '确认告警 #ID', en: 'Ack alert #ID' },
+  silenceCmd: { zh: '静默告警 #ID 时长', en: 'Silence alert #ID duration' },
+  viewCmd: { zh: '查看告警 #ID', en: 'View alert #ID' },
+  searchCmd: { zh: '搜索 关键词', en: 'Search keyword' },
+  statsCmd: { zh: '统计', en: 'Stats' },
+  oncallCmd: { zh: '当前值班', en: 'On-call now' },
 };
 
 interface LanguageContextType {

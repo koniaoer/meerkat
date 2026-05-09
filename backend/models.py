@@ -189,3 +189,29 @@ class RemediationTemplate(Base):
     success_rate = Column(String, default="0")  # "completed/total" e.g. "8/10"
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class KnowledgeArticle(Base):
+    __tablename__ = "knowledge_articles"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String)
+    content = Column(Text)
+    category = Column(String, default="general")  # runbook/troubleshoot/faq/postmortem/general
+    tags = Column(String, nullable=True)  # comma-separated tags for search
+    alert_name = Column(String, nullable=True)  # linked alert name for auto-suggest
+    severity = Column(String, nullable=True)  # applicable severity
+    author = Column(String, nullable=True)
+    view_count = Column(Integer, default=0)
+    helpful_count = Column(Integer, default=0)
+    is_published = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String, index=True)
+    role = Column(String)  # user/assistant/system
+    content = Column(Text)
+    action_taken = Column(String, nullable=True)  # JSON: any action executed
+    alert_id = Column(Integer, nullable=True)  # linked alert
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -8,6 +8,7 @@ import {
   SafetyOutlined, FileSearchOutlined,
   TeamOutlined, RiseOutlined,
   ToolOutlined,
+  BookOutlined, MessageOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ModelConfigPage from './pages/ModelConfig';
@@ -21,6 +22,8 @@ import AuditLog from './pages/AuditLog';
 import OnCallSchedule from './pages/OnCallSchedule';
 import EscalationPolicyPage from './pages/EscalationPolicy';
 import RemediationTemplates from './pages/RemediationTemplates';
+import KnowledgeBase from './pages/KnowledgeBase';
+import ChatOps from './pages/ChatOps';
 import UserManagement from './pages/UserManagement';
 import { LanguageProvider, useLanguage } from './services/i18n';
 import { ThemeProvider, useTheme } from './services/theme';
@@ -117,6 +120,8 @@ const AppContent = () => {
     { key: '/notification-channels', icon: <BellOutlined />, label: <Link to="/notification-channels">{t('notificationChannels')}</Link> },
     { key: '/remediation-actions', icon: <ThunderboltOutlined />, label: <Link to="/remediation-actions">{t('aiAutoOps')}</Link> },
     { key: '/remediation-templates', icon: <ToolOutlined />, label: <Link to="/remediation-templates">{t('remediationTemplates')}</Link> },
+    { key: '/knowledge', icon: <BookOutlined />, label: <Link to="/knowledge">{t('knowledgeBase')}</Link> },
+    { key: '/chatops', icon: <MessageOutlined />, label: <Link to="/chatops">{t('chatops')}</Link> },
     { key: '/alert-rules', icon: <SafetyOutlined />, label: <Link to="/alert-rules">{t('alertRules')}</Link> },
     { key: '/oncall', icon: <TeamOutlined />, label: <Link to="/oncall">{t('oncallSchedule')}</Link> },
     { key: '/escalation', icon: <RiseOutlined />, label: <Link to="/escalation">{t('escalationPolicy')}</Link> },
@@ -291,6 +296,8 @@ const AppContent = () => {
               <Route path="/notification-channels" element={<NotificationChannels />} />
               <Route path="/remediation-actions" element={<RemediationActions />} />
               <Route path="/remediation-templates" element={<RemediationTemplates />} />
+              <Route path="/knowledge" element={<KnowledgeBase />} />
+              <Route path="/chatops" element={<ChatOps />} />
               <Route path="/alert-rules" element={<AlertRules />} />
               <Route path="/oncall" element={<OnCallSchedule />} />
               <Route path="/escalation" element={<EscalationPolicyPage />} />

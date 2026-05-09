@@ -356,3 +356,46 @@ class RemediationTemplateResponse(BaseModel):
     created_at: datetime
     class Config:
         from_attributes = True
+
+# ─── Knowledge Article ─────────────────────────────────────────────────────
+class KnowledgeArticleCreate(BaseModel):
+    title: str
+    content: str
+    category: str = "general"
+    tags: Optional[str] = None
+    alert_name: Optional[str] = None
+    severity: Optional[str] = None
+    is_published: bool = True
+
+class KnowledgeArticleResponse(BaseModel):
+    id: int
+    title: str
+    content: str
+    category: str
+    tags: Optional[str] = None
+    alert_name: Optional[str] = None
+    severity: Optional[str] = None
+    author: Optional[str] = None
+    view_count: int
+    helpful_count: int
+    is_published: bool
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+# ─── ChatOps ───────────────────────────────────────────────────────────────
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    alert_id: Optional[int] = None
+
+class ChatResponse(BaseModel):
+    session_id: str
+    role: str
+    content: str
+    action_taken: Optional[str] = None
+    alert_id: Optional[int] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
