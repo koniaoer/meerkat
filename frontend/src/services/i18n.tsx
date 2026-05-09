@@ -146,6 +146,27 @@ export const translations: Translation = {
   result: { zh: '执行结果', en: 'Result' },
   description: { zh: '描述', en: 'Description' },
   aiAutoOps: { zh: 'AI 自动运维', en: 'AI Auto Ops' },
+  // User Management
+  userManagement: { zh: '用户管理', en: 'User Management' },
+  displayName: { zh: '显示名称', en: 'Display Name' },
+  role: { zh: '角色', en: 'Role' },
+  roleAdmin: { zh: '管理员', en: 'Admin' },
+  roleOperator: { zh: '运维人员', en: 'Operator' },
+  roleViewer: { zh: '只读用户', en: 'Viewer' },
+  createUser: { zh: '创建用户', en: 'Create User' },
+  editUser: { zh: '编辑用户', en: 'Edit User' },
+  deleteUser: { zh: '删除用户', en: 'Delete User' },
+  deleteUserConfirm: { zh: '确定删除该用户？此操作不可撤销。', en: 'Delete this user? This cannot be undone.' },
+  changePassword: { zh: '修改密码', en: 'Change Password' },
+  newPassword: { zh: '新密码', en: 'New Password' },
+  confirmPassword: { zh: '确认密码', en: 'Confirm Password' },
+  passwordMismatch: { zh: '两次输入的密码不一致', en: 'Passwords do not match' },
+  lastAdminWarning: { zh: '系统至少需要一个管理员', en: 'System requires at least one admin' },
+  cannotDeleteSelf: { zh: '不能删除自己的账号', en: 'Cannot delete your own account' },
+  cannotDeactivateSelf: { zh: '不能禁用自己的账号', en: 'Cannot deactivate your own account' },
+  cannotDemoteSelf: { zh: '不能降低自己的角色等级', en: 'Cannot demote your own role' },
+  permissionDenied: { zh: '权限不足', en: 'Permission Denied' },
+  passwordMinLength: { zh: '密码至少6个字符', en: 'Password must be at least 6 characters' },
 };
 
 interface LanguageContextType {

@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { Layout, Menu, Button, Space, Spin } from 'antd';
-import { DashboardOutlined, SettingOutlined, HomeOutlined, TranslationOutlined, MessageOutlined, BellOutlined, LogoutOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { DashboardOutlined, SettingOutlined, HomeOutlined, TranslationOutlined, MessageOutlined, BellOutlined, LogoutOutlined, ThunderboltOutlined, UserOutlined } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ModelConfigPage from './pages/ModelConfig';
 import DingTalkConfigPage from './pages/DingTalkConfig';
@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import AlertDetail from './pages/AlertDetail';
 import NotificationChannels from './pages/NotificationChannels';
 import RemediationActions from './pages/RemediationActions';
+import UserManagement from './pages/UserManagement';
 import { LanguageProvider, useLanguage } from './services/i18n';
 import { useEffect, useState, ReactNode } from 'react';
 import { getMe } from './services/api';
@@ -28,6 +29,7 @@ const AppContent = () => {
   const navigate = useNavigate();
   const { language, setLanguage, t } = useLanguage();
   const [authState, setAuthState] = useState<AuthState>('checking');
+  const [userRole, setUserRole] = useState<string>('viewer');
 
   // Check auth on startup
   useEffect(() => {
@@ -35,7 +37,8 @@ const AppContent = () => {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          await getMe();
+          const meRes = await getMe();
+          setUserRole(meRes.data.role || 'viewer');
           setAuthState('authenticated');
           return;
         } catch (e: any) {
@@ -68,13 +71,16 @@ const AppContent = () => {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          await getMe();
+          const meRes = await getMe();
+          setUserRole(meRes.data.role || 'viewer');
           setAuthState('authenticated');
         } catch {
           localStorage.removeItem('token');
+          setUserRole('viewer');
           setAuthState('unauthenticated');
         }
       } else {
+        setUserRole('viewer');
         setAuthState('unauthenticated');
       }
     };
@@ -95,6 +101,8 @@ const AppContent = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('displayName');
     window.dispatchEvent(new Event('auth-change'));
   };
 
@@ -119,6 +127,12 @@ const AppContent = () => {
       icon: <ThunderboltOutlined />,
       label: <Link to="/remediation-actions">{t('aiAutoOps')}</Link>,
     },
+    // Admin-only menu items
+    ...(userRole === 'admin' ? [{
+      key: '/users',
+      icon: <UserOutlined />,
+      label: <Link to="/users">{t('userManagement')}</Link>,
+    }] : []),
     {
       key: '/config',
       icon: <SettingOutlined />,
@@ -198,6 +212,7 @@ const AppContent = () => {
               <Route path="/alerts/:id" element={<AlertDetail />} />
               <Route path="/notification-channels" element={<NotificationChannels />} />
               <Route path="/remediation-actions" element={<RemediationActions />} />
+              <Route path="/users" element={<UserManagement />} />
               <Route path="/config" element={<ModelConfigPage />} />
               <Route path="/dingtalk" element={<DingTalkConfigPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />

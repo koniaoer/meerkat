@@ -139,6 +139,33 @@ def create_user(db: Session, username: str, hashed_password: str):
     db.refresh(db_user)
     return db_user
 
+def get_users(db: Session, skip: int = 0, limit: int = 100):
+    return db.query(models.User).offset(skip).limit(limit).all()
+
+def get_user_by_id(db: Session, user_id: int):
+    return db.query(models.User).filter(models.User.id == user_id).first()
+
+def update_user(db: Session, user_id: int, updates: dict):
+    db_user = get_user_by_id(db, user_id)
+    if not db_user:
+        return None
+    for key, value in updates.items():
+        if value is not None:
+            setattr(db_user, key, value)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+def delete_user(db: Session, user_id: int):
+    db_user = get_user_by_id(db, user_id)
+    if db_user:
+        db.delete(db_user)
+        db.commit()
+    return db_user
+
+def count_users(db: Session):
+    return db.query(models.User).count()
+
 # NotificationChannel CRUD
 def get_notification_channels(db: Session):
     return db.query(models.NotificationChannel).all()

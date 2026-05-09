@@ -48,6 +48,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    display_name = Column(String, nullable=True)  # 显示名称
+    role = Column(String, default="viewer")  # admin / operator / viewer
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

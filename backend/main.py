@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -10,6 +11,7 @@ from alert_dedup import alert_dedup, ai_rate_limiter
 from auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, require_auth, encrypt_value, decrypt_value,
+    require_role,
 )
 from notification.manager import notification_manager
 from database import engine, get_db
@@ -18,7 +20,31 @@ from action_executor import execute_action, AUTO_APPROVE_LOW_RISK
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Meerkat AI Bot API")
+# Lifespan: init admin user on startup (skipped when SKIP_ADMIN_INIT=1 for tests)
+@asynccontextmanager
+async def lifespan(app):
+    if os.environ.get("SKIP_ADMIN_INIT") != "1":
+        db_gen = get_db()
+        db = next(db_gen)
+        try:
+            if crud.count_users(db) == 0:
+                admin_username = os.environ.get("ADMIN_USERNAME", "admin")
+                admin_password = os.environ.get("ADMIN_PASSWORD", "admin@123")
+                existing = crud.get_user_by_username(db, admin_username)
+                if not existing:
+                    hashed = hash_password(admin_password)
+                    user = models.User(username=admin_username, hashed_password=hashed, role="admin", is_active=True, display_name="管理员")
+                    db.add(user)
+                    db.commit()
+                    logger.info("Initialized admin user: %s", admin_username)
+        finally:
+            try:
+                next(db_gen)
+            except StopIteration:
+                pass
+    yield
+
+app = FastAPI(title="Meerkat AI Bot API", lifespan=lifespan)
 
 # CORS — support configurable origins
 import os
@@ -43,25 +69,26 @@ def health_check():
 # ─── Auth Endpoints ────────────────────────────────────────────────────────────
 @app.post("/api/v1/auth/register", response_model=schemas.UserResponse)
 def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
-    """Register a new user. If no users exist yet, registration is open. Otherwise requires auth."""
-    # Check if any users exist
-    existing_user = db.query(models.User).first()
-    if existing_user:
-        # Require auth for subsequent registrations — but we'll handle this simply for now
-        # In production, you'd add admin role check here
-        pass
-
-    # Check if username already taken
+    """Register first user (open when no users exist). After that, use admin user management."""
+    # Only allow registration when no users exist (first-time setup)
+    if crud.count_users(db) > 0:
+        raise HTTPException(status_code=403, detail="已有用户存在，请使用管理员账号创建用户")
+    
     if crud.get_user_by_username(db, user_data.username):
         raise HTTPException(status_code=400, detail="用户名已存在")
-
+    
     hashed = hash_password(user_data.password)
     user = crud.create_user(db, user_data.username, hashed)
-    logger.info("User registered: %s", user_data.username)
+    # First user is always admin
+    user.role = "admin"
+    user.display_name = "管理员"
+    db.commit()
+    db.refresh(user)
+    logger.info("First user registered as admin: %s", user_data.username)
     return user
 
 
-@app.post("/api/v1/auth/login", response_model=schemas.Token)
+@app.post("/api/v1/auth/login")
 def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
     """Login and get JWT token"""
     user = crud.get_user_by_username(db, login_data.username)
@@ -70,9 +97,15 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=401, detail="用户已被禁用")
 
-    token = create_access_token(data={"sub": user.username})
-    logger.info("User logged in: %s", user.username)
-    return {"access_token": token, "token_type": "bearer"}
+    token = create_access_token(data={"sub": user.username, "role": user.role})
+    logger.info("User logged in: %s (role=%s)", user.username, user.role)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": user.role,
+        "username": user.username,
+        "display_name": user.display_name,
+    }
 
 
 @app.get("/api/v1/auth/me", response_model=schemas.UserResponse)
@@ -83,9 +116,100 @@ def get_me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
 
+# ─── User Management Endpoints (Admin Only) ──────────────────────────────────
+@app.get("/api/v1/users", response_model=List[schemas.UserResponse])
+def list_users(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("admin")),
+):
+    """List all users (admin only)"""
+    return crud.get_users(db, skip=skip, limit=limit)
+
+
+@app.post("/api/v1/users", response_model=schemas.UserResponse)
+def create_user(
+    user_data: schemas.UserCreateByAdmin,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("admin")),
+):
+    """Create a new user (admin only)"""
+    if crud.get_user_by_username(db, user_data.username):
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    
+    if user_data.role not in ("admin", "operator", "viewer"):
+        raise HTTPException(status_code=400, detail="无效的角色，可选: admin, operator, viewer")
+    
+    hashed = hash_password(user_data.password)
+    user = crud.create_user(db, user_data.username, hashed)
+    user.role = user_data.role
+    user.display_name = user_data.display_name
+    db.commit()
+    db.refresh(user)
+    logger.info("Admin %s created user: %s (role=%s)", current_user.username, user_data.username, user_data.role)
+    return user
+
+
+@app.put("/api/v1/users/{user_id}", response_model=schemas.UserResponse)
+def update_user(
+    user_id: int,
+    user_data: schemas.UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("admin")),
+):
+    """Update a user (admin only)"""
+    db_user = crud.get_user_by_id(db, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # Prevent admin from deactivating themselves
+    if db_user.id == current_user.id and user_data.is_active is False:
+        raise HTTPException(status_code=400, detail="不能禁用自己的账号")
+    
+    # Prevent admin from demoting themselves
+    if db_user.id == current_user.id and user_data.role and user_data.role != "admin":
+        raise HTTPException(status_code=400, detail="不能降低自己的角色等级")
+    
+    updates = {}
+    if user_data.display_name is not None:
+        updates["display_name"] = user_data.display_name
+    if user_data.role is not None:
+        if user_data.role not in ("admin", "operator", "viewer"):
+            raise HTTPException(status_code=400, detail="无效的角色")
+        updates["role"] = user_data.role
+    if user_data.is_active is not None:
+        updates["is_active"] = user_data.is_active
+    if user_data.password is not None:
+        updates["hashed_password"] = hash_password(user_data.password)
+    
+    result = crud.update_user(db, user_id, updates)
+    logger.info("Admin %s updated user id=%d: %s", current_user.username, user_id, list(updates.keys()))
+    return result
+
+
+@app.delete("/api/v1/users/{user_id}")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("admin")),
+):
+    """Delete a user (admin only)"""
+    db_user = crud.get_user_by_id(db, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    if db_user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="不能删除自己的账号")
+    
+    crud.delete_user(db, user_id)
+    logger.info("Admin %s deleted user: %s", current_user.username, db_user.username)
+    return {"message": "用户已删除"}
+
+
 # ─── Model Config Endpoints ───────────────────────────────────────────────────
 @app.post("/api/v1/model-configs", response_model=schemas.ModelConfig)
-def create_config(config: schemas.ModelConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def create_config(config: schemas.ModelConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     # Encrypt API key before saving
     config_data = config.model_dump()
     config_data["api_key"] = encrypt_value(config_data["api_key"])
@@ -107,7 +231,7 @@ def read_active_config(db: Session = Depends(get_db), _user: models.User = Depen
 
 
 @app.put("/api/v1/model-configs/{config_id}", response_model=schemas.ModelConfig)
-def update_config(config_id: int, config: schemas.ModelConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def update_config(config_id: int, config: schemas.ModelConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     config_data = config.model_dump()
     config_data["api_key"] = encrypt_value(config_data["api_key"])
     db_config = crud.update_model_config(db, config_id, schemas.ModelConfigCreate(**config_data))
@@ -117,7 +241,7 @@ def update_config(config_id: int, config: schemas.ModelConfigCreate, db: Session
 
 
 @app.delete("/api/v1/model-configs/{config_id}")
-def delete_config(config_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def delete_config(config_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     crud.delete_model_config(db, config_id)
     return {"message": "Deleted successfully"}
 
@@ -143,7 +267,7 @@ def read_dingtalk_configs(db: Session = Depends(get_db), _user: models.User = De
 
 
 @app.post("/api/v1/dingtalk-configs", response_model=schemas.DingTalkConfig)
-def create_dingtalk_config(config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def create_dingtalk_config(config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     config_data = config.model_dump()
     if config_data.get("secret"):
         config_data["secret"] = encrypt_value(config_data["secret"])
@@ -151,7 +275,7 @@ def create_dingtalk_config(config: schemas.DingTalkConfigCreate, db: Session = D
 
 
 @app.put("/api/v1/dingtalk-configs/{config_id}", response_model=schemas.DingTalkConfig)
-def update_dingtalk_config(config_id: int, config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def update_dingtalk_config(config_id: int, config: schemas.DingTalkConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     config_data = config.model_dump()
     if config_data.get("secret"):
         config_data["secret"] = encrypt_value(config_data["secret"])
@@ -159,7 +283,7 @@ def update_dingtalk_config(config_id: int, config: schemas.DingTalkConfigCreate,
 
 
 @app.delete("/api/v1/dingtalk-configs/{config_id}")
-def delete_dingtalk_config(config_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def delete_dingtalk_config(config_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     crud.delete_dingtalk_config(db, config_id)
     return {"message": "Deleted successfully"}
 
@@ -199,7 +323,7 @@ def list_notification_channels(db: Session = Depends(get_db), _user: models.User
 
 
 @app.post("/api/v1/notification-channels", response_model=schemas.NotificationChannelResponse)
-def create_notification_channel(channel: schemas.NotificationChannelCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def create_notification_channel(channel: schemas.NotificationChannelCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     # Encrypt sensitive fields in config JSON
     config_dict = json.loads(channel.config) if isinstance(channel.config, str) else channel.config
     sensitive_keys = ["api_key", "secret", "password", "smtp_password"]
@@ -211,7 +335,7 @@ def create_notification_channel(channel: schemas.NotificationChannelCreate, db: 
 
 
 @app.put("/api/v1/notification-channels/{channel_id}", response_model=schemas.NotificationChannelResponse)
-def update_notification_channel(channel_id: int, channel: schemas.NotificationChannelCreate, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def update_notification_channel(channel_id: int, channel: schemas.NotificationChannelCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     config_dict = json.loads(channel.config) if isinstance(channel.config, str) else channel.config
     sensitive_keys = ["api_key", "secret", "password", "smtp_password"]
     for key in sensitive_keys:
@@ -225,7 +349,7 @@ def update_notification_channel(channel_id: int, channel: schemas.NotificationCh
 
 
 @app.delete("/api/v1/notification-channels/{channel_id}")
-def delete_notification_channel(channel_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def delete_notification_channel(channel_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     crud.delete_notification_channel(db, channel_id)
     return {"message": "Deleted successfully"}
 
@@ -452,9 +576,9 @@ def get_alert(alert_id: int, db: Session = Depends(get_db), _user: models.User =
 
 
 @app.put("/api/v1/alerts/{alert_id}/acknowledge", response_model=schemas.Alert)
-def acknowledge_alert(alert_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def acknowledge_alert(alert_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     """Acknowledge an alert"""
-    result = crud.acknowledge_alert(db, alert_id, acknowledged_by="admin")
+    result = crud.acknowledge_alert(db, alert_id, acknowledged_by=_user.username)
     if not result:
         raise HTTPException(status_code=404, detail="Alert not found")
     logger.info("Alert %d acknowledged", alert_id)
@@ -462,7 +586,7 @@ def acknowledge_alert(alert_id: int, db: Session = Depends(get_db), _user: model
 
 
 @app.put("/api/v1/alerts/{alert_id}/silence", response_model=schemas.Alert)
-def silence_alert(alert_id: int, duration_minutes: int = Query(120, description="Silence duration in minutes"), db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+def silence_alert(alert_id: int, duration_minutes: int = Query(120, description="Silence duration in minutes"), db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     """Silence an alert for a given duration"""
     result = crud.silence_alert(db, alert_id, duration_minutes)
     if not result:
@@ -497,7 +621,7 @@ def get_remediation_action(action_id: int, db: Session = Depends(get_db), _user:
 async def approve_remediation_action(
     action_id: int,
     approval: schemas.ActionApproval,
-    db: Session = Depends(get_db), _user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator")),
 ):
     """Approve or reject a remediation action"""
     db_action = crud.get_remediation_action(db, action_id)
@@ -534,7 +658,7 @@ async def approve_remediation_action(
 
 
 @app.post("/api/v1/remediation-actions/{action_id}/execute")
-async def execute_remediation_action(action_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+async def execute_remediation_action(action_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     """Re-execute a completed or failed action"""
     db_action = crud.get_remediation_action(db, action_id)
     if not db_action:

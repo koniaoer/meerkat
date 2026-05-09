@@ -63,6 +63,12 @@ export const updateDingTalkConfig = (id: number, data: any) => api.put(`/dingtal
 export const deleteDingTalkConfig = (id: number) => api.delete(`/dingtalk-configs/${id}`);
 export const testDingTalkConfig = (data: any) => api.post('/dingtalk-configs/test', data);
 
+// User Management
+export const getUsers = () => api.get('/users');
+export const createUser = (data: any) => api.post('/users', data);
+export const updateUser = (id: number, data: any) => api.put(`/users/${id}`, data);
+export const deleteUser = (id: number) => api.delete(`/users/${id}`);
+
 // Remediation Actions
 export const getRemediationActions = (params?: any) => api.get('/remediation-actions', { params });
 export const getRemediationAction = (id: number) => api.get(`/remediation-actions/${id}`);

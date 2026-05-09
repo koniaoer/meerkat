@@ -103,15 +103,32 @@ class UserCreate(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
+    display_name: Optional[str] = None
+    role: str = "viewer"
     is_active: bool
     created_at: datetime
 
     class Config:
         from_attributes = True
 
+class UserUpdate(BaseModel):
+    display_name: Optional[str] = None
+    role: Optional[str] = None  # admin / operator / viewer
+    is_active: Optional[bool] = None
+    password: Optional[str] = None  # optional password change
+
+class UserCreateByAdmin(BaseModel):
+    username: str
+    password: str
+    display_name: Optional[str] = None
+    role: str = "viewer"  # default role for new users
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    role: str = "viewer"
+    username: str = ""
+    display_name: Optional[str] = None
 
 class LoginRequest(BaseModel):
     username: str

@@ -24,8 +24,10 @@ const Login: React.FC = () => {
         form.resetFields();
       } else {
         const res = await login(values);
-        const { access_token } = res.data;
+        const { access_token, role, display_name } = res.data;
         localStorage.setItem('token', access_token);
+        localStorage.setItem('userRole', role || 'viewer');
+        localStorage.setItem('displayName', display_name || '');
         window.dispatchEvent(new Event('auth-change'));
         message.success(t('loginSuccess'));
         navigate('/');

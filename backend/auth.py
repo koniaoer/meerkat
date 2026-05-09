@@ -99,6 +99,21 @@ async def require_auth(current_user: models.User = Depends(get_current_user)) ->
         )
     return current_user
 
+# Role hierarchy: admin > operator > viewer
+ROLE_HIERARCHY = {"admin": 3, "operator": 2, "viewer": 1}
+
+def require_role(min_role: str):
+    """Dependency factory: require user to have at least min_role"""
+    async def _check_role(current_user: models.User = Depends(get_current_user)) -> models.User:
+        if current_user is None:
+            raise HTTPException(status_code=401, detail="未登录")
+        user_level = ROLE_HIERARCHY.get(current_user.role, 0)
+        required_level = ROLE_HIERARCHY.get(min_role, 99)
+        if user_level < required_level:
+            raise HTTPException(status_code=403, detail=f"权限不足，需要 {min_role} 及以上角色")
+        return current_user
+    return _check_role
+
 # API Key encryption (Fernet symmetric encryption)
 _encryption_key_env = os.environ.get("ENCRYPTION_KEY", "")
 try:
