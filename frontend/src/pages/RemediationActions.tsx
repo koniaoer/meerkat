@@ -32,7 +32,7 @@ const typeIconMap: Record<string, { label: string; color: string }> = {
 
 const RemediationActions: React.FC = () => {
   const { t } = useLanguage();
-  const [actions, setActions] = useState<any[]>([]);
+  const [allActions, setAllActions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{ status?: string; risk_level?: string }>({});
   const [stats, setStats] = useState({ pending: 0, completed: 0, failed: 0, total: 0 });
@@ -40,25 +40,30 @@ const RemediationActions: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [searchText, setSearchText] = useState('');
 
+  // Filtered actions derived from allActions + filters + search
+  const actions = React.useMemo(() => {
+    let filtered = allActions;
+    if (filters.status) {
+      filtered = filtered.filter((a: any) => a.status === filters.status);
+    }
+    if (filters.risk_level) {
+      filtered = filtered.filter((a: any) => a.risk_level === filters.risk_level);
+    }
+    if (searchText) {
+      const lower = searchText.toLowerCase();
+      filtered = filtered.filter((a: any) =>
+        a.name?.toLowerCase().includes(lower) || a.description?.toLowerCase().includes(lower)
+      );
+    }
+    return filtered;
+  }, [allActions, filters, searchText]);
+
   const fetchActions = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = {};
-      if (filters.status) params.status = filters.status;
-      const res = await getRemediationActions(params);
-      let filtered = res.data;
-      if (filters.risk_level) {
-        filtered = filtered.filter((a: any) => a.risk_level === filters.risk_level);
-      }
-      if (searchText) {
-        const lower = searchText.toLowerCase();
-        filtered = filtered.filter((a: any) =>
-          a.name?.toLowerCase().includes(lower) || a.description?.toLowerCase().includes(lower)
-        );
-      }
-      setActions(filtered);
-      // Calc stats from all actions
+      const res = await getRemediationActions({});
       const all = res.data;
+      setAllActions(all);
       setStats({
         pending: all.filter((a: any) => a.status === 'pending').length,
         completed: all.filter((a: any) => a.status === 'completed').length,
@@ -70,7 +75,7 @@ const RemediationActions: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters, searchText]);
+  }, []);
 
   useEffect(() => {
     fetchActions();
