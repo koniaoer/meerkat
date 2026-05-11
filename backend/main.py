@@ -570,6 +570,7 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
         else:
             # Call AI with rate limiting + timeout
             if active_config:
+                analysis_error = None
                 await ai_rate_limiter.acquire()
                 try:
                     import asyncio
@@ -580,15 +581,19 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
                 except asyncio.TimeoutError:
                     logger.warning("AI analysis timed out for alert %s, using fallback", alert.labels.get("alertname", "unknown"))
                     analysis = {"summary": "AI 分析超时，请稍后重试", "root_cause": "", "suggestion": "", "severity": "low"}
+                    analysis_error = "timeout: AI 分析超过 15 秒未响应，请检查模型配置或网络连通性"
                 except Exception as e:
                     logger.warning("AI analysis failed for alert %s: %s", alert.labels.get("alertname", "unknown"), e)
                     analysis = {"summary": f"AI 分析失败: {str(e)[:80]}", "root_cause": "", "suggestion": "", "severity": "low"}
+                    analysis_error = f"{type(e).__name__}: {str(e)[:200]}"
                 finally:
                     ai_rate_limiter.release()
+                if analysis_error:
+                    analysis["error"] = analysis_error
                 # Cache the result
                 alert_dedup.cache_analysis(fingerprint, analysis)
             else:
-                analysis = {"summary": "No active AI model configuration", "root_cause": "", "suggestion": "", "severity": "low"}
+                analysis = {"summary": "No active AI model configuration", "root_cause": "", "suggestion": "", "severity": "low", "error": "no_active_model: 未配置 AI 模型，请在「AI 模型」页面配置"}
 
         # Prepare alert record
         alert_create = schemas.AlertCreate(
@@ -754,6 +759,58 @@ def silence_alert(alert_id: int, duration_minutes: int = Query(120, description=
                           detail=json.dumps({"duration_minutes": duration_minutes}))
     logger.info("Alert %d silenced for %d minutes", alert_id, duration_minutes)
     return result
+
+
+@app.post("/api/v1/alerts/{alert_id}/reanalyze", response_model=schemas.Alert)
+async def reanalyze_alert(alert_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    """Re-run AI analysis for an alert"""
+    alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    active_config = crud.get_active_model_config(db)
+    if not active_config:
+        raise HTTPException(status_code=400, detail="未配置 AI 模型，请先在「AI 模型」页面配置")
+
+    # Decrypt API key
+    if active_config.api_key:
+        active_config.api_key = decrypt_value(active_config.api_key)
+
+    # Build alert data for AI analysis
+    raw = json.loads(alert.raw_data) if alert.raw_data else {}
+    if not raw.get("labels"):
+        raw["labels"] = {"alertname": alert.alert_name, "severity": alert.severity}
+    if not raw.get("annotations"):
+        raw["annotations"] = {"summary": alert.summary or "", "description": alert.description or ""}
+
+    analysis_error = None
+    try:
+        import asyncio
+        analysis = await asyncio.wait_for(
+            ai_service.analyze_alert_with_ai(raw, active_config),
+            timeout=30.0
+        )
+    except asyncio.TimeoutError:
+        analysis = {"summary": "AI 分析超时", "root_cause": "", "suggestion": "", "severity": "low"}
+        analysis_error = "timeout: AI 分析超过 30 秒未响应，请检查模型配置或网络连通性"
+    except Exception as e:
+        analysis = {"summary": f"AI 分析失败: {str(e)[:80]}", "root_cause": "", "suggestion": "", "severity": "low"}
+        analysis_error = f"{type(e).__name__}: {str(e)[:200]}"
+
+    # Update alert
+    alert.analysis_summary = analysis.get("summary")
+    alert.analysis_root_cause = analysis.get("root_cause")
+    alert.analysis_suggestion = analysis.get("suggestion")
+    alert.analysis_severity = analysis.get("severity")
+    alert.analysis_result = json.dumps(analysis, ensure_ascii=False)
+    alert.analysis_error = analysis_error
+    db.commit()
+    db.refresh(alert)
+
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="alert.reanalyze", resource_type="alert", resource_id=alert_id,
+                          detail=json.dumps({"success": analysis_error is None, "error": analysis_error}, ensure_ascii=False))
+    return alert
 
 
 # ─── Remediation Action Endpoints ─────────────────────────────────────────────

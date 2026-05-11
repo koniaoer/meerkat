@@ -48,6 +48,7 @@ class Alert(AlertBase):
     analysis_root_cause: Optional[str] = None
     analysis_suggestion: Optional[str] = None
     analysis_severity: Optional[str] = None
+    analysis_error: Optional[str] = None
     fingerprint: Optional[str] = None
     resolved_at: Optional[datetime] = None
     acknowledged: Optional[bool] = False

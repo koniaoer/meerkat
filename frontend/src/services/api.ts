@@ -40,7 +40,8 @@ export const getAlertStats = () => api.get('/alerts/stats');
 export const getDashboardStats = () => api.get('/dashboard/stats');
 export const getAlertsWithFilters = (params: { status?: string; severity?: string; acknowledged?: boolean; skip?: number; limit?: number }) => api.get('/alerts', { params });
 export const acknowledgeAlert = (id: number) => api.put(`/alerts/${id}/acknowledge`);
-export const silenceAlert = (id: number, durationMinutes: number) => api.put(`/alerts/${id}/silence`, null, { params: { duration_minutes: durationMinutes } });
+export const silenceAlert = (id: number, duration: number) => api.put(`/alerts/${id}/silence`, null, { params: { duration_minutes: duration } });
+export const reanalyzeAlert = (id: number) => api.post(`/alerts/${id}/reanalyze`);
 
 // Notification Channels
 export const getNotificationChannels = () => api.get('/notification-channels');

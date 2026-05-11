@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Row, Col, Card, Statistic, Select, Table, Tag, Button, Dropdown, Space, Progress } from 'antd';
+import { Row, Col, Card, Statistic, Select, Table, Tag, Button, Dropdown, Space, Progress, Tooltip, Popover, message } from 'antd';
 import { AlertOutlined, CheckCircleOutlined, EyeOutlined, ExclamationCircleOutlined,
-  BellOutlined, ToolOutlined, RiseOutlined, TeamOutlined, ClockCircleOutlined } from '@ant-design/icons';
-import { getAlertsWithFilters, getDashboardStats, acknowledgeAlert, silenceAlert } from '../services/api';
+  BellOutlined, ToolOutlined, RiseOutlined, TeamOutlined, ClockCircleOutlined,
+  RedoOutlined, WarningOutlined } from '@ant-design/icons';
+import { getAlertsWithFilters, getDashboardStats, acknowledgeAlert, silenceAlert, reanalyzeAlert } from '../services/api';
 import { useLanguage } from '../services/i18n';
 import { useNavigate } from 'react-router-dom';
 
@@ -92,6 +93,22 @@ const Dashboard: React.FC = () => {
 
   const handleAcknowledge = async (id: number) => { try { await acknowledgeAlert(id); fetchStats(); fetchAlerts(); } catch {} };
   const handleSilence = async (id: number, m: number) => { try { await silenceAlert(id, m); fetchStats(); fetchAlerts(); } catch {} };
+  const [reanalyzing, setReanalyzing] = useState<number|null>(null);
+  const handleReanalyze = async (id: number) => {
+    setReanalyzing(id);
+    try {
+      const res = await reanalyzeAlert(id);
+      if (res.data.analysis_error) {
+        message.error(`AI 分析失败: ${res.data.analysis_error}`);
+      } else {
+        message.success('AI 分析完成');
+      }
+      fetchAlerts();
+    } catch (e: any) {
+      const detail = e.response?.data?.detail || '重试失败';
+      message.error(detail);
+    } finally { setReanalyzing(null); }
+  };
   const silenceItems = (id: number) => [
     { key: '30', label: '30 min', onClick: () => handleSilence(id, 30) },
     { key: '60', label: '1 h', onClick: () => handleSilence(id, 60) },
@@ -107,7 +124,29 @@ const Dashboard: React.FC = () => {
     { title: t('alertName'), dataIndex: 'alert_name', key: 'n', ellipsis: true },
     { title: t('status'), dataIndex: 'status', key: 's', width: 90, render: (v: string) => <Tag color={v === 'firing' ? 'red' : 'green'}>{v?.toUpperCase()}</Tag> },
     { title: t('severity'), dataIndex: 'severity', key: 'sv', width: 90, render: (v: string) => <Tag color={severityColorMap[v]}>{v?.toUpperCase() || '-'}</Tag> },
-    { title: t('analysisSummary'), dataIndex: 'analysis_summary', key: 'a', ellipsis: true, render: (v: string) => <span style={{ color: v ? undefined : '#999' }}>{v || t('waiting')}</span> },
+    { title: t('analysisSummary'), dataIndex: 'analysis_summary', key: 'a', ellipsis: true, render: (v: string, r: any) => {
+      const hasError = r.analysis_error;
+      if (hasError) {
+        return (
+          <Space size={4}>
+            <Tooltip title={
+              <div style={{ maxHeight: 200, overflow: 'auto' }}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>❌ 分析失败详情</div>
+                <div style={{ fontFamily: 'monospace', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{r.analysis_error}</div>
+              </div>
+            }>
+              <Tag color="error" style={{ cursor: 'pointer', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <WarningOutlined /> {v || 'AI 分析失败'}
+              </Tag>
+            </Tooltip>
+            <Button size="small" type="link" icon={<RedoOutlined spin={reanalyzing === r.id} />} loading={reanalyzing === r.id} onClick={(e) => { e.stopPropagation(); handleReanalyze(r.id); }}>
+              重试
+            </Button>
+          </Space>
+        );
+      }
+      return <span style={{ color: v ? undefined : 'var(--ant-color-text-tertiary, #999)' }}>{v || t('waiting')}</span>;
+    }},
     { title: t('actions'), key: 'ac', width: 150, render: (_: any, r: any) => <Space size="small">
       {!r.acknowledged && <Button size="small" onClick={e => { e.stopPropagation(); handleAcknowledge(r.id); }}>{t('acknowledge')}</Button>}
       <Dropdown menu={{ items: silenceItems(r.id) }}><Button size="small" onClick={e => e.stopPropagation()}>{t('silence')}</Button></Dropdown>

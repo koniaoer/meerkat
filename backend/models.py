@@ -32,6 +32,7 @@ class Alert(Base):
     analysis_root_cause = Column(String, nullable=True)
     analysis_suggestion = Column(String, nullable=True)
     analysis_severity = Column(String, nullable=True)
+    analysis_error = Column(String, nullable=True)
     raw_data = Column(Text)
     fingerprint = Column(String, index=True, nullable=True)
     resolved_at = Column(DateTime, nullable=True)

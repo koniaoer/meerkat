@@ -54,6 +54,7 @@ def create_alert(db: Session, alert: schemas.AlertCreate, analysis_result: str =
         analysis_root_cause=analysis.get("root_cause") if analysis else None,
         analysis_suggestion=analysis.get("suggestion") if analysis else None,
         analysis_severity=analysis.get("severity") if analysis else None,
+        analysis_error=analysis.get("error") if analysis else None,
     )
     db.add(db_alert)
     db.commit()
