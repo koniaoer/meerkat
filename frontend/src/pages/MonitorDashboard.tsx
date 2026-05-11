@@ -81,7 +81,7 @@ const MonitorDashboardPage: React.FC = () => {
 
   useEffect(() => { loadData(); }, []);
 
-  // Fetch panel data
+  // Fetch panel data — supports multi-query format "q1|||leg1;;;q2|||leg2"
   const fetchPanelData = useCallback(async (panel: any, dsId?: number) => {
     if (!panel.query) return;
     const now = Math.floor(Date.now() / 1000);
@@ -89,20 +89,37 @@ const MonitorDashboardPage: React.FC = () => {
     const start = now - seconds;
     const step = seconds <= 300 ? '15' : seconds <= 3600 ? '60' : seconds <= 86400 ? '120' : '300';
 
-    try {
-      const res = await prometheusQueryRange({
-        query: panel.query, start: start.toString(), end: now.toString(), step,
-        ds_id: dsId || currentDash?.datasource_id,
-      });
-      if (res.data?.status === 'success') {
-        setPanelData(prev => ({ ...prev, [panel.id]: res.data.data }));
-      } else {
-        setPanelData(prev => ({ ...prev, [panel.id]: { status: 'error', errorType: 'upstream', error: res.data?.error || 'Query failed' } }));
+    // Parse multi-query format
+    const queries: { expr: string; legend: string }[] = [];
+    if (panel.query.includes(';;;')) {
+      for (const part of panel.query.split(';;;')) {
+        const [expr, legend] = part.split('|||');
+        if (expr?.trim()) queries.push({ expr: expr.trim(), legend: legend || '' });
       }
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || e?.message || 'Connection failed';
-      setPanelData(prev => ({ ...prev, [panel.id]: { status: 'error', errorType: 'connection', error: msg } }));
+    } else {
+      queries.push({ expr: panel.query, legend: panel.legend || '' });
     }
+
+    // Fetch all queries in parallel
+    const results: { expr: string; legend: string; data: any }[] = [];
+    const promises = queries.map(async (q) => {
+      try {
+        const res = await prometheusQueryRange({
+          query: q.expr, start: start.toString(), end: now.toString(), step,
+          ds_id: dsId || currentDash?.datasource_id,
+        });
+        if (res.data?.status === 'success') {
+          return { expr: q.expr, legend: q.legend, data: res.data.data };
+        }
+        return { expr: q.expr, legend: q.legend, data: { status: 'error', error: res.data?.error || 'Query failed' } };
+      } catch (e: any) {
+        const msg = e?.response?.data?.detail || e?.message || 'Connection failed';
+        return { expr: q.expr, legend: q.legend, data: { status: 'error', errorType: 'connection', error: msg } };
+      }
+    });
+
+    const allResults = await Promise.all(promises);
+    setPanelData(prev => ({ ...prev, [panel.id]: allResults }));
   }, [timeRange, currentDash]);
 
   // Auto refresh
@@ -217,18 +234,16 @@ const MonitorDashboardPage: React.FC = () => {
   const parseGrafanaDashboard = (jsonStr: string) => {
     try {
       const gf = JSON.parse(jsonStr);
-      // Support both full export and panel-only
-      const panels = gf.panels || (gf.dashboard?.panels) || [];
-      if (!panels.length) { message.error(t('noPanelsInImport')); return; }
+      const rawPanels = gf.panels || (gf.dashboard?.panels) || [];
+      if (!rawPanels.length) { message.error(t('noPanelsInImport')); return; }
 
       const title = gf.title || gf.dashboard?.title || t('importedDashboard');
       const dsId = datasources.length > 0 ? datasources[0].id : undefined;
       const meerkatPanels: any[] = [];
-      let yOff = 0;
 
       // Flatten nested panels (Grafana rows contain sub-panels)
       const flatPanels: any[] = [];
-      for (const p of panels) {
+      for (const p of rawPanels) {
         if (p.type === 'row' && p.panels?.length) {
           flatPanels.push(...p.panels);
         } else if (p.type !== 'row') {
@@ -239,60 +254,55 @@ const MonitorDashboardPage: React.FC = () => {
       for (const p of flatPanels) {
         // Map Grafana panel type
         let chartType = 'line';
-        if (p.type === 'stat' || p.type === 'singlestat' || p.type === 'table') chartType = 'stat';
+        if (p.type === 'stat' || p.type === 'singlestat') chartType = 'stat';
         else if (p.type === 'gauge') chartType = 'gauge';
+        else if (p.type === 'table') chartType = 'stat';
 
         // Map unit
         const rawUnit = p.fieldConfig?.defaults?.unit || p.units || '';
         const unit = rawUnit.replace('percentunit', 'percent').replace('decbytes', 'bytes').replace('Bps', 'bytes').replace('short', '').replace('none', '');
 
-        // Grid: Grafana uses 24-col, we use 24-col
+        // Grid: Grafana uses 24-col grid, same as us — keep original positions
         const gridW = p.gridPos?.w || 12;
-        const gridH = Math.max(Math.round((p.gridPos?.h || 8) / 2), 2);
+        const gridH = p.gridPos?.h || 8;
         const gridX = p.gridPos?.x || 0;
-        const gridY = p.gridPos?.y ? Math.round(p.gridPos.y / 2) + yOff : yOff;
+        const gridY = p.gridPos?.y || 0;
 
-        // Build PromQL from targets — each target becomes its own panel
+        // Build PromQL from targets — keep ALL targets in ONE panel
+        // ECharts line chart naturally overlays multiple series
         const targets = (p.targets || []).filter((t: any) => t.expr || t.query);
 
         if (!targets.length) continue;
 
-        // If only 1 target, keep as one panel
-        if (targets.length === 1) {
-          let q = cleanPromQL(targets[0].expr || targets[0].query || '');
-          if (!q) continue;
-          meerkatPanels.push({
-            id: `p${Date.now()}_${meerkatPanels.length}`,
-            title: p.title || 'Panel',
-            query: q,
-            unit,
-            type: chartType,
-            grid: { x: gridX, y: gridY, w: Math.min(gridW, 24), h: gridH },
-            legend: p.description || '',
-            thresholds: (p.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
-          });
-          yOff = gridY + gridH;
-        } else {
-          // Multiple targets — each gets its own sub-panel
-          const subW = Math.max(Math.floor(gridW / targets.length), 4);
-          for (let i = 0; i < targets.length; i++) {
-            const t = targets[i];
-            let q = cleanPromQL(t.expr || t.query || '');
-            if (!q) continue;
-            const subX = gridX + i * subW;
-            meerkatPanels.push({
-              id: `p${Date.now()}_${meerkatPanels.length}`,
-              title: t.legend || p.title || `Query ${i + 1}`,
-              query: q,
-              unit,
-              type: chartType,
-              grid: { x: subX, y: gridY, w: subW, h: gridH },
-              legend: t.legend || '',
-              thresholds: (p.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
-            });
-          }
-          yOff = gridY + gridH;
+        // Collect all cleaned queries with their legends
+        const queries: { expr: string; legend: string }[] = [];
+        for (const t of targets) {
+          let q = cleanPromQL(t.expr || t.query || '');
+          if (q) queries.push({ expr: q, legend: t.legend || '' });
         }
+
+        if (!queries.length) continue;
+
+        // Single query: use as-is
+        // Multiple queries: use the first as primary, store extras for multi-series rendering
+        const primaryQuery = queries[0].expr;
+        const extraQueries = queries.length > 1 ? queries.slice(1) : [];
+        // For multi-query panels, we encode extra queries so the chart renderer can use them
+        // Format: "query1|||legend1;;;query2|||legend2"
+        const queryStr = extraQueries.length > 0
+          ? queries.map(q => `${q.expr}|||${q.legend}`).join(';;;')
+          : primaryQuery;
+
+        meerkatPanels.push({
+          id: `p${Date.now()}_${meerkatPanels.length}`,
+          title: p.title || 'Panel',
+          query: queryStr,
+          unit,
+          type: chartType,
+          grid: { x: gridX, y: gridY, w: Math.min(gridW, 24), h: gridH },
+          legend: p.description || '',
+          thresholds: (p.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
+        });
       }
 
       if (!meerkatPanels.length) { message.error(t('noPanelsInImport')); return; }
@@ -316,44 +326,88 @@ const MonitorDashboardPage: React.FC = () => {
     }
   };
   const renderChart = (panel: any) => {
-    const data = panelData[panel.id];
-    if (!data) {
+    const rawData = panelData[panel.id];
+    if (!rawData) {
       return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80 }}><Spin /></div>;
     }
-    if (data.status === 'error') {
-      const isConn = data.errorType === 'connection';
+
+    // Normalize: both single-query (old) and multi-query (new) format
+    const multiData: { expr: string; legend: string; data: any }[] = Array.isArray(rawData) ? rawData : [{ expr: panel.query, legend: panel.legend || '', data: rawData }];
+
+    // Check for errors
+    const firstError = multiData.find(d => d.data?.status === 'error');
+    if (firstError?.data?.status === 'error') {
+      const isConn = firstError.data.errorType === 'connection';
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80, padding: 16 }}>
           <div style={{ fontSize: 24, marginBottom: 8 }}>{isConn ? '🔌' : '⚠️'}</div>
           <div style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary, #999)', textAlign: 'center' }}>
             {isConn ? t('datasourceConnError') : t('queryError')}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--ant-color-text-quaternary, #bbb)', textAlign: 'center', marginTop: 4, maxWidth: 300, wordBreak: 'break-all' }}>{data.error}</div>
+          <div style={{ fontSize: 10, color: 'var(--ant-color-text-quaternary, #bbb)', textAlign: 'center', marginTop: 4, maxWidth: 300, wordBreak: 'break-all' }}>{firstError.data.error}</div>
         </div>
       );
     }
-    if (!data?.result?.length) {
+
+    // Collect all results across queries
+    const allResults: any[] = [];
+    for (const mq of multiData) {
+      if (mq.data?.result) {
+        for (const r of mq.data.result) {
+          allResults.push({ ...r, _legend: mq.legend, _expr: mq.expr });
+        }
+      }
+    }
+
+    if (!allResults.length) {
       return <Empty description={t('noData')} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} />;
     }
 
+    // Stat type: show multiple values in a row
     if (panel.type === 'stat') {
-      const latest = data.result[0]?.values?.[data.result[0].values.length - 1]?.[1] || data.result[0]?.value?.[1] || 0;
-      const numVal = parseFloat(latest);
-      const thresholds = panel.thresholds || [];
-      let color = 'var(--ant-color-text, #333)';
-      for (const th of thresholds) {
-        if (numVal >= th.value) color = th.color;
+      const items = allResults.slice(0, 12).map((r: any, i: number) => {
+        const latest = r.values?.[r.values.length - 1]?.[1] || r.value?.[1] || 0;
+        const numVal = parseFloat(latest);
+        const thresholds = panel.thresholds || [];
+        let color = 'var(--ant-color-text, #333)';
+        for (const th of thresholds) {
+          if (numVal >= th.value) color = th.color;
+        }
+        const label = r._legend || Object.values(r.metric || {}).filter((v: any) => typeof v === 'string' && v !== '').join(' · ') || '';
+        return { numVal, color, label };
+      });
+
+      if (items.length <= 2) {
+        // 1-2 values: big display
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80, gap: 4 }}>
+            {items.map((item, i) => (
+              <React.Fragment key={i}>
+                <div style={{ fontSize: items.length === 1 ? 36 : 28, fontWeight: 700, color: item.color }}>{formatValue(item.numVal, panel.unit)}</div>
+                {item.label && <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary, #999)' }}>{item.label}</div>}
+              </React.Fragment>
+            ))}
+          </div>
+        );
       }
+
+      // 3+ values: grid layout
+      const cols = Math.min(items.length, 4);
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80 }}>
-          <div style={{ fontSize: 36, fontWeight: 700, color }}>{formatValue(numVal, panel.unit)}</div>
-          <div style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary, #999)', marginTop: 4 }}>{panel.legend || panel.title}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, padding: 4, height: '100%', alignContent: 'center' }}>
+          {items.map((item, i) => (
+            <div key={i} style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: item.color }}>{formatValue(item.numVal, panel.unit)}</div>
+              {item.label && <div style={{ fontSize: 9, color: 'var(--ant-color-text-tertiary, #999)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>}
+            </div>
+          ))}
         </div>
       );
     }
 
+    // Gauge type: show first value
     if (panel.type === 'gauge') {
-      const latest = parseFloat(data.result[0]?.values?.[data.result[0].values.length - 1]?.[1] || data.result[0]?.value?.[1] || 0);
+      const latest = parseFloat(allResults[0]?.values?.[allResults[0].values.length - 1]?.[1] || allResults[0]?.value?.[1] || 0);
       const option = {
         series: [{
           type: 'gauge', startAngle: 200, endAngle: -20, min: 0, max: 100,
@@ -369,11 +423,12 @@ const MonitorDashboardPage: React.FC = () => {
       return <ReactEChartsCore echarts={echarts} option={option} style={{ height: 180 }} notMerge lazyUpdate />;
     }
 
-    // Default: line chart
+    // Default: line chart — overlay all series from all queries
     const series: any[] = [];
     const legendNames: string[] = [];
-    for (const r of data.result) {
-      const name = Object.values(r.metric || {}).filter((v: any) => typeof v === 'string' && v !== '').join(' · ') || panel.title;
+    for (const r of allResults) {
+      const metricLabels = Object.values(r.metric || {}).filter((v: any) => typeof v === 'string' && v !== '').join(' · ');
+      const name = r._legend || metricLabels || panel.title;
       legendNames.push(name);
       series.push({
         name, type: 'line', smooth: true, symbol: 'none',
@@ -423,8 +478,8 @@ const MonitorDashboardPage: React.FC = () => {
                   </Popconfirm>
                 </Space>
               }
-              style={{ minHeight: grid.h * 60 + 60 }}
-              bodyStyle={{ padding: '8px 12px' }}
+              style={{ minHeight: grid.h * 30 + 60 }}
+              styles={{ body: { padding: '8px 12px', height: 'calc(100% - 46px)' } }}
             >
               {renderChart(panel)}
             </Card>
