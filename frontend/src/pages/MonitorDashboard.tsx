@@ -217,7 +217,18 @@ const MonitorDashboardPage: React.FC = () => {
         // Build PromQL from targets
         const queries = (p.targets || [])
           .filter((t: any) => t.expr || t.query)
-          .map((t: any) => t.expr || t.query || '');
+          .map((t: any) => {
+            let q = t.expr || t.query || '';
+            // Strip Grafana template variables: $var, ${var}, [[var]]
+            q = q.replace(/\$\{?[\w.]+\}?/g, '').replace(/\[\[[\w.]+\]\]/g, '').replace(/\s+/g, ' ').trim();
+            // Fix empty label matchers like {job=~""} -> remove that matcher
+            q = q.replace(/,\s*\w+(?:=~?)["'][^"']*["']/g, (m) => {
+              const val = m.match(/=~?["']([^"']*)["']/);
+              return (val && val[1]) ? m : '';
+            });
+            return q;
+          })
+          .filter(q => q.length > 0);
         const query = queries[0] || '';
 
         if (!query) continue;
