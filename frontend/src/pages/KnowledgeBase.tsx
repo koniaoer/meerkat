@@ -111,21 +111,21 @@ const KnowledgeBase: React.FC = () => {
     <div>
       {/* Stats */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
-        <Col span={4}>
+        <Col span={3}>
           <Card bordered={false} size="small" style={{ background: 'var(--ant-color-bg-elevated)', textAlign: 'center' }}>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{stats.total}</div>
-            <div style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary, #999)' }}>{t('knowledgeBase')}</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{stats.total}</div>
+            <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary, #999)' }}>{t('knowledgeBase')}</div>
           </Card>
         </Col>
         {Object.entries(categoryConfig).map(([key, cfg]) => (
-          <Col span={4} key={key}>
+          <Col span={3} key={key}>
             <Card
               bordered={false} size="small"
               style={{ background: categoryFilter === key ? cfg.color : 'var(--ant-color-bg-elevated)', cursor: 'pointer', textAlign: 'center' }}
               onClick={() => { setCategoryFilter(categoryFilter === key ? undefined : key); setPageState(p => ({ ...p, current: 1 })); }}
             >
-              <div style={{ fontSize: 20 }}>{cfg.emoji}</div>
-              <div style={{ fontSize: 12, color: categoryFilter === key ? '#fff' : 'var(--ant-color-text-tertiary, #999)', marginTop: 2 }}>
+              <div style={{ fontSize: 18 }}>{cfg.emoji}</div>
+              <div style={{ fontSize: 11, color: categoryFilter === key ? '#fff' : 'var(--ant-color-text-tertiary, #999)', marginTop: 2 }}>
                 {t(key)} ({stats.byCat[key] || 0})
               </div>
             </Card>
@@ -168,7 +168,7 @@ const KnowledgeBase: React.FC = () => {
             const cfg = categoryConfig[art.category] || categoryConfig.general;
             const preview = art.content?.length > 120 ? art.content.slice(0, 120) + '...' : art.content;
             return (
-              <Col xs={24} sm={12} lg={8} xl={6} key={art.id}>
+              <Col xs={24} sm={12} lg={8} key={art.id}>
                 <Card
                   hoverable
                   size="small"
@@ -185,9 +185,9 @@ const KnowledgeBase: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                       <Text strong ellipsis style={{ flex: 1, fontSize: 14 }}>{art.title}</Text>
                     </div>
-                    <div style={{ marginBottom: 8 }}>
+                    <div style={{ marginBottom: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                       <Tag color={cfg.color} style={{ margin: 0 }}>{cfg.emoji} {t(art.category)}</Tag>
-                      {art.alert_name && <Tag style={{ margin: '0 0 0 4px' }} color="volcano">{art.alert_name}</Tag>}
+                      {art.alert_name && <Tag style={{ margin: 0, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} color="volcano">{art.alert_name}</Tag>}
                     </div>
                     <Paragraph
                       style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary, #999)', marginBottom: 8, lineHeight: 1.6 }}
