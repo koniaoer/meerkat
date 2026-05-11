@@ -370,6 +370,16 @@ export const translations: Translation = {
   'refreshIntervalSec': { zh: '刷新间隔(秒)', en: 'Refresh Interval (s)' },
   'noData': { zh: '暂无数据', en: 'No Data' },
   'noPanels': { zh: '暂无面板', en: 'No Panels' },
+  'datasourceConnError': { zh: '数据源连接失败', en: 'Datasource connection failed' },
+  'queryError': { zh: '查询执行失败', en: 'Query execution failed' },
+  'importGrafana': { zh: '导入 Grafana', en: 'Import Grafana' },
+  'import': { zh: '导入', en: 'Import' },
+  'importGrafanaHint': { zh: '粘贴 Grafana Dashboard JSON（支持完整导出格式和面板数组格式）。自动解析 panels、targets( PromQL )、gridPos、unit、阈值等字段。', en: 'Paste Grafana Dashboard JSON (full export or panel array). Auto-parses panels, targets (PromQL), gridPos, units, thresholds.' },
+  'importSuccess': { zh: '导入成功', en: 'Import successful' },
+  'importFailed': { zh: '导入失败', en: 'Import failed' },
+  'noPanelsInImport': { zh: '未找到有效面板', en: 'No valid panels found' },
+  'importedDashboard': { zh: '导入的看板', en: 'Imported Dashboard' },
+  'panels': { zh: '个面板', en: 'panels' },
 };
 
 interface LanguageContextType {

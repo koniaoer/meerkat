@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Row, Col, Card, Select, Button, Space, Modal, Form, Input, InputNumber, message, Popconfirm, Empty, Spin, Tag, Tooltip, Switch, Typography } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, SettingOutlined, LineChartOutlined, DashboardOutlined, ApiOutlined, FullscreenOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, SettingOutlined, LineChartOutlined, DashboardOutlined, ApiOutlined, FullscreenOutlined, ImportOutlined } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
 import { LineChart as ELineChart, GaugeChart, BarChart } from 'echarts/charts';
@@ -64,6 +64,8 @@ const MonitorDashboardPage: React.FC = () => {
   const [dsForm] = Form.useForm();
   const [dashForm] = Form.useForm();
   const [panelForm] = Form.useForm();
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importJson, setImportJson] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadData = useCallback(async () => {
@@ -94,8 +96,13 @@ const MonitorDashboardPage: React.FC = () => {
       });
       if (res.data?.status === 'success') {
         setPanelData(prev => ({ ...prev, [panel.id]: res.data.data }));
+      } else {
+        setPanelData(prev => ({ ...prev, [panel.id]: { status: 'error', errorType: 'upstream', error: res.data?.error || 'Query failed' } }));
       }
-    } catch {}
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || 'Connection failed';
+      setPanelData(prev => ({ ...prev, [panel.id]: { status: 'error', errorType: 'connection', error: msg } }));
+    }
   }, [timeRange, currentDash]);
 
   // Auto refresh
@@ -182,9 +189,107 @@ const MonitorDashboardPage: React.FC = () => {
     } catch { message.error(t('failed')); }
   };
 
-  // Render chart
+  // Grafana Dashboard Import
+  const parseGrafanaDashboard = (jsonStr: string) => {
+    try {
+      const gf = JSON.parse(jsonStr);
+      // Support both full export and panel-only
+      const panels = gf.panels || (gf.dashboard?.panels) || [];
+      if (!panels.length) { message.error(t('noPanelsInImport')); return; }
+
+      const title = gf.title || gf.dashboard?.title || t('importedDashboard');
+      const dsId = datasources.length > 0 ? datasources[0].id : undefined;
+      const meerkatPanels: any[] = [];
+      let yOff = 0;
+
+      for (const p of panels) {
+        // Skip row panels (they're just visual separators)
+        if (p.type === 'row') continue;
+
+        // Resolve datasource
+        let panelDsId = dsId;
+        const ds = p.datasource ?? p.datasourceUid ?? p.targets?.[0]?.datasource;
+        if (ds && typeof ds === 'object' && ds.uid) {
+          const found = datasources.find((d: any) => d.name.toLowerCase().includes(ds.uid.toLowerCase()));
+          if (found) panelDsId = found.id;
+        }
+
+        // Build PromQL from targets
+        const queries = (p.targets || [])
+          .filter((t: any) => t.expr || t.query)
+          .map((t: any) => t.expr || t.query || '');
+        const query = queries[0] || '';
+
+        if (!query) continue;
+
+        // Map Grafana panel type
+        let chartType = 'line';
+        if (p.type === 'stat' || p.type === 'singlestat') chartType = 'stat';
+        else if (p.type === 'gauge') chartType = 'gauge';
+        else if (p.type === 'barchart' || p.type === 'bar') chartType = 'line'; // use line for bar
+
+        // Map unit
+        const unit = p.fieldConfig?.defaults?.unit || p.units || '';
+
+        // Grid: Grafana uses 24-col, we use 24-col
+        const gridW = p.gridPos?.w || 12;
+        const gridH = Math.max(Math.round((p.gridPos?.h || 8) / 2), 2);
+        const gridX = p.gridPos?.x || 0;
+        const gridY = p.gridPos?.y ? Math.round(p.gridPos.y / 2) + yOff : yOff;
+
+        // Combine multiple targets into one panel if they share the same panel
+        const allQueries = queries.length > 1 ? queries.join(' OR ') : query;
+
+        meerkatPanels.push({
+          id: `p${Date.now()}_${meerkatPanels.length}`,
+          title: p.title || 'Panel',
+          query: allQueries,
+          unit: unit.replace('percentunit', 'percent').replace('decbytes', 'bytes').replace('s', 'seconds').replace('Bps', 'bytes'),
+          type: chartType,
+          grid: { x: gridX, y: gridY, w: Math.min(gridW, 24), h: gridH },
+          legend: p.description || '',
+          thresholds: (p.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
+        });
+        yOff = gridY + gridH;
+      }
+
+      if (!meerkatPanels.length) { message.error(t('noPanelsInImport')); return; }
+
+      // Create the dashboard
+      createMonitorDashboard({
+        name: title,
+        description: `Imported from Grafana: ${title}`,
+        datasource_id: dsId,
+        panels: meerkatPanels,
+        refresh_interval: gf.refresh || gf.templating?.list?.[0]?.refresh || 30,
+        time_range: gf.time?.from || '1h',
+      }).then(() => {
+        message.success(`${t('importSuccess')}: ${meerkatPanels.length} ${t('panels')}`);
+        setImportModalOpen(false);
+        setImportJson('');
+        loadData();
+      }).catch(() => message.error(t('failed')));
+    } catch (e: any) {
+      message.error(`${t('importFailed')}: ${e.message}`);
+    }
+  };
   const renderChart = (panel: any) => {
     const data = panelData[panel.id];
+    if (!data) {
+      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80 }}><Spin /></div>;
+    }
+    if (data.status === 'error') {
+      const isConn = data.errorType === 'connection';
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80, padding: 16 }}>
+          <div style={{ fontSize: 24, marginBottom: 8 }}>{isConn ? '🔌' : '⚠️'}</div>
+          <div style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary, #999)', textAlign: 'center' }}>
+            {isConn ? t('datasourceConnError') : t('queryError')}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--ant-color-text-quaternary, #bbb)', textAlign: 'center', marginTop: 4, maxWidth: 300, wordBreak: 'break-all' }}>{data.error}</div>
+        </div>
+      );
+    }
     if (!data?.result?.length) {
       return <Empty description={t('noData')} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} />;
     }
@@ -317,6 +422,9 @@ const MonitorDashboardPage: React.FC = () => {
         </Col>
         <Col>
           <Button icon={<PlusOutlined />} type="primary" onClick={() => { setCurrentDash(null); dashForm.resetFields(); setDashModalOpen(true); }}>{t('newDashboard')}</Button>
+        </Col>
+        <Col>
+          <Button icon={<ImportOutlined />} onClick={() => { setImportModalOpen(true); setImportJson(''); }}>{t('importGrafana')}</Button>
         </Col>
         <Col flex="auto" />
         <Col>
@@ -451,6 +559,28 @@ const MonitorDashboardPage: React.FC = () => {
             <Col span={6}><Form.Item name={['grid', 'y']} label="Y"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
         </Form>
+      </Modal>
+
+      {/* Import Grafana Dashboard */}
+      <Modal
+        title={t('importGrafana')}
+        open={importModalOpen}
+        onCancel={() => setImportModalOpen(false)}
+        onOk={() => parseGrafanaDashboard(importJson)}
+        okText={t('import')}
+        width={700}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--ant-color-text-tertiary, #999)' }}>
+          {t('importGrafanaHint')}
+        </div>
+        <Input.TextArea
+          rows={16}
+          value={importJson}
+          onChange={e => setImportJson(e.target.value)}
+          placeholder='{"dashboard":{"panels":[...],"title":"..."},"overwrite":true}'
+          style={{ fontFamily: 'monospace', fontSize: 11 }}
+        />
       </Modal>
     </div>
   );
