@@ -42,6 +42,8 @@ export const getAlertsWithFilters = (params: { status?: string; severity?: strin
 export const acknowledgeAlert = (id: number) => api.put(`/alerts/${id}/acknowledge`);
 export const silenceAlert = (id: number, duration: number) => api.put(`/alerts/${id}/silence`, null, { params: { duration_minutes: duration } });
 export const reanalyzeAlert = (id: number) => api.post(`/alerts/${id}/reanalyze`);
+export const deleteAlert = (id: number) => api.delete(`/alerts/${id}`);
+export const batchDeleteAlerts = (ids: number[]) => api.post('/alerts/batch-delete', { ids });
 
 // Notification Channels
 export const getNotificationChannels = () => api.get('/notification-channels');
@@ -70,6 +72,8 @@ export const getRemediationActions = (params?: any) => api.get('/remediation-act
 export const getRemediationAction = (id: number) => api.get(`/remediation-actions/${id}`);
 export const approveRemediationAction = (id: number, approved: boolean) => api.put(`/remediation-actions/${id}/approve`, { approved, approved_by: 'admin' });
 export const executeRemediationAction = (id: number) => api.post(`/remediation-actions/${id}/execute`);
+export const deleteRemediationAction = (id: number) => api.delete(`/remediation-actions/${id}`);
+export const batchDeleteRemediationActions = (ids: number[]) => api.post('/remediation-actions/batch-delete', { ids });
 
 // Routing Rules
 export const getRoutingRules = () => api.get('/routing-rules');

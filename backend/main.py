@@ -760,6 +760,34 @@ def silence_alert(alert_id: int, duration_minutes: int = Query(120, description=
     logger.info("Alert %d silenced for %d minutes", alert_id, duration_minutes)
     return result
 
+@app.delete("/api/v1/alerts/{alert_id}")
+def delete_alert(alert_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    db_alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
+    if not db_alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    # Delete related remediation actions
+    db.query(models.RemediationAction).filter(models.RemediationAction.alert_id == alert_id).delete()
+    db.delete(db_alert)
+    db.commit()
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="alert.delete", resource_type="alert", resource_id=alert_id)
+    return {"status": "deleted"}
+
+@app.post("/api/v1/alerts/batch-delete")
+def batch_delete_alerts(ids: list[int] = [], db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    deleted = 0
+    for aid in ids:
+        db_alert = db.query(models.Alert).filter(models.Alert.id == aid).first()
+        if db_alert:
+            db.query(models.RemediationAction).filter(models.RemediationAction.alert_id == aid).delete()
+            db.delete(db_alert)
+            deleted += 1
+    db.commit()
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="alert.batch_delete", resource_type="alert",
+                          detail=json.dumps({"count": deleted, "ids": ids}, ensure_ascii=False))
+    return {"status": "deleted", "count": deleted}
+
 
 @app.post("/api/v1/alerts/{alert_id}/reanalyze", response_model=schemas.Alert)
 async def reanalyze_alert(alert_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
@@ -899,6 +927,31 @@ async def execute_remediation_action(action_id: int, db: Session = Depends(get_d
         crud.update_action_status(db, action_id, "failed", result=json.dumps({"success": False, "output": str(e)}))
 
     return crud.get_remediation_action(db, action_id)
+
+@app.delete("/api/v1/remediation-actions/{action_id}")
+def delete_remediation_action(action_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    db_action = crud.get_remediation_action(db, action_id)
+    if not db_action:
+        raise HTTPException(status_code=404, detail="Action not found")
+    db.delete(db_action)
+    db.commit()
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="remediation_action.delete", resource_type="remediation_action", resource_id=action_id)
+    return {"status": "deleted"}
+
+@app.post("/api/v1/remediation-actions/batch-delete")
+def batch_delete_remediation_actions(ids: list[int] = [], db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    deleted = 0
+    for aid in ids:
+        db_action = crud.get_remediation_action(db, aid)
+        if db_action:
+            db.delete(db_action)
+            deleted += 1
+    db.commit()
+    crud.create_audit_log(db, username=_user.username, user_id=_user.id,
+                          action="remediation_action.batch_delete", resource_type="remediation_action",
+                          detail=json.dumps({"count": deleted, "ids": ids}, ensure_ascii=False))
+    return {"status": "deleted", "count": deleted}
 
 
 # ─── Routing Rule Endpoints ────────────────────────────────────────────────

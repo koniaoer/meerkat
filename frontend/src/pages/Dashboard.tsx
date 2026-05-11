@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Row, Col, Card, Statistic, Select, Table, Tag, Button, Dropdown, Space, Progress, Tooltip, Popover, message } from 'antd';
+import { Row, Col, Card, Statistic, Select, Table, Tag, Button, Dropdown, Space, Progress, Tooltip, Popover, message, Popconfirm } from 'antd';
 import { AlertOutlined, CheckCircleOutlined, EyeOutlined, ExclamationCircleOutlined,
   BellOutlined, ToolOutlined, RiseOutlined, TeamOutlined, ClockCircleOutlined,
-  RedoOutlined, WarningOutlined } from '@ant-design/icons';
-import { getAlertsWithFilters, getDashboardStats, acknowledgeAlert, silenceAlert, reanalyzeAlert } from '../services/api';
+  RedoOutlined, WarningOutlined, DeleteOutlined } from '@ant-design/icons';
+import { getAlertsWithFilters, getDashboardStats, acknowledgeAlert, silenceAlert, reanalyzeAlert, deleteAlert, batchDeleteAlerts } from '../services/api';
 import { useLanguage } from '../services/i18n';
 import { useNavigate } from 'react-router-dom';
 
@@ -68,6 +68,7 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{ status?: string; severity?: string; acknowledged?: string }>({});
+  const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
 
   const fetchStats = async () => {
     try { const res = await getDashboardStats(); setStats(res.data); } catch (e) { console.error(e); }
@@ -109,6 +110,19 @@ const Dashboard: React.FC = () => {
       message.error(detail);
     } finally { setReanalyzing(null); }
   };
+  const handleDeleteAlert = async (id: number) => {
+    try { await deleteAlert(id); message.success('已删除'); fetchStats(); fetchAlerts(); setSelectedRowKeys(prev => prev.filter(k => k !== id)); }
+    catch { message.error(t('failed')); }
+  };
+  const handleBatchDelete = async () => {
+    if (selectedRowKeys.length === 0) return;
+    try {
+      await batchDeleteAlerts(selectedRowKeys);
+      message.success(`已删除 ${selectedRowKeys.length} 条告警`);
+      setSelectedRowKeys([]);
+      fetchStats(); fetchAlerts();
+    } catch { message.error(t('failed')); }
+  };
   const silenceItems = (id: number) => [
     { key: '30', label: '30 min', onClick: () => handleSilence(id, 30) },
     { key: '60', label: '1 h', onClick: () => handleSilence(id, 60) },
@@ -147,9 +161,12 @@ const Dashboard: React.FC = () => {
       }
       return <span style={{ color: v ? undefined : 'var(--ant-color-text-tertiary, #999)' }}>{v || t('waiting')}</span>;
     }},
-    { title: t('actions'), key: 'ac', width: 150, render: (_: any, r: any) => <Space size="small">
+    { title: t('actions'), key: 'ac', width: 180, render: (_: any, r: any) => <Space size="small">
       {!r.acknowledged && <Button size="small" onClick={e => { e.stopPropagation(); handleAcknowledge(r.id); }}>{t('acknowledge')}</Button>}
       <Dropdown menu={{ items: silenceItems(r.id) }}><Button size="small" onClick={e => e.stopPropagation()}>{t('silence')}</Button></Dropdown>
+      <Popconfirm title="确定删除此告警？" onConfirm={(e?: any) => { e?.stopPropagation?.(); handleDeleteAlert(r.id); }}>
+        <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={e => e.stopPropagation()} />
+      </Popconfirm>
     </Space> },
   ];
 
@@ -212,10 +229,18 @@ const Dashboard: React.FC = () => {
         <Col><Select allowClear placeholder={t('statusFilter')} style={{ width: 130 }} onChange={v => setFilters({ ...filters, status: v })} options={[{ value: 'firing', label: t('firing') }, { value: 'resolved', label: t('resolved') }]} /></Col>
         <Col><Select allowClear placeholder={t('severityFilter')} style={{ width: 130 }} onChange={v => setFilters({ ...filters, severity: v })} options={[{ value: 'critical', label: t('critical') }, { value: 'high', label: t('high') }, { value: 'warning', label: t('warning') }, { value: 'info', label: t('info') }]} /></Col>
         <Col><Select allowClear placeholder={t('acknowledgedFilter')} style={{ width: 130 }} onChange={v => setFilters({ ...filters, acknowledged: v })} options={[{ value: 'yes', label: t('yes') }, { value: 'no', label: t('no') }]} /></Col>
+        {selectedRowKeys.length > 0 && (
+          <Col>
+            <Popconfirm title={`确定删除选中的 ${selectedRowKeys.length} 条告警？`} onConfirm={handleBatchDelete}>
+              <Button danger icon={<DeleteOutlined />}>批量删除 ({selectedRowKeys.length})</Button>
+            </Popconfirm>
+          </Col>
+        )}
       </Row>
 
       {/* ── Alert table ────────────────────────────────────────────── */}
       <Table dataSource={alerts} columns={columns} rowKey="id" loading={loading} size="small" pagination={{ pageSize: 10 }}
+        rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as number[]) }}
         onRow={r => ({ onClick: () => navigate(`/alerts/${r.id}`), style: { cursor: 'pointer' } })} />
     </div>
   );
