@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Row, Col, Card, Select, Button, Space, Modal, Form, Input, InputNumber, message, Popconfirm, Empty, Spin, Tag, Tooltip, Switch, Typography } from 'antd';
+import { Row, Col, Card, Select, Button, Space, Modal, Form, Input, InputNumber, message, Popconfirm, Empty, Spin, Tag, Tooltip, Switch, Typography, Divider } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, SettingOutlined, LineChartOutlined, DashboardOutlined, ApiOutlined, FullscreenOutlined, ImportOutlined } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
@@ -22,17 +22,34 @@ const timeRanges = [
   { label: '7d', value: '7d' }, { label: '30d', value: '30d' },
 ];
 
+// Parse time range: supports "1h", "now-15m", "15m" etc.
 const parseRange = (range: string): number => {
-  const map: Record<string, number> = { m: 60, h: 3600, d: 86400 };
-  const m = range.match(/^(\d+)([mhd])$/);
+  if (!range) return 3600;
+  const map: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400, w: 604800 };
+  // Handle "now-X" or "now-Xh" Grafana format
+  const gf = range.match(/now-(\d+)([smhdw])/i);
+  if (gf) return parseInt(gf[1]) * (map[gf[2]] || 60);
+  // Handle "Xm", "Xh" etc.
+  const m = range.match(/^(\d+)([smhdw])$/);
   return m ? parseInt(m[1]) * (map[m[2]] || 60) : 3600;
+};
+
+// Normalize time_range to simple format for our selector
+const normalizeTimeRange = (range: string): string => {
+  if (!range) return '1h';
+  const seconds = parseRange(range);
+  // Find closest match in our timeRanges
+  for (const tr of timeRanges) {
+    if (parseRange(tr.value) === seconds) return tr.value;
+  }
+  return range;
 };
 
 const formatValue = (val: number, unit?: string): string => {
   if (unit === 'bytes') {
-    if (val >= 1073741824) return (val / 1073741824).toFixed(2) + ' GB';
-    if (val >= 1048576) return (val / 1048576).toFixed(2) + ' MB';
-    if (val >= 1024) return (val / 1024).toFixed(2) + ' KB';
+    if (Math.abs(val) >= 1073741824) return (val / 1073741824).toFixed(2) + ' GB';
+    if (Math.abs(val) >= 1048576) return (val / 1048576).toFixed(2) + ' MB';
+    if (Math.abs(val) >= 1024) return (val / 1024).toFixed(2) + ' KB';
     return val.toFixed(0) + ' B';
   }
   if (unit === 'percent' || unit === '%') return val.toFixed(1) + '%';
@@ -42,10 +59,24 @@ const formatValue = (val: number, unit?: string): string => {
     if (val >= 60) return (val / 60).toFixed(1) + 'm';
     return val.toFixed(1) + 's';
   }
+  if (unit === 'celsius' || unit === '°C') return val.toFixed(1) + '°C';
+  if (unit === 'bps') {
+    if (Math.abs(val) >= 1e9) return (val / 1e9).toFixed(2) + ' Gbps';
+    if (Math.abs(val) >= 1e6) return (val / 1e6).toFixed(2) + ' Mbps';
+    if (Math.abs(val) >= 1e3) return (val / 1e3).toFixed(2) + ' Kbps';
+    return val.toFixed(0) + ' bps';
+  }
+  if (unit === 'reqps') return val.toFixed(1) + ' req/s';
+  if (unit === 'iops') return val.toFixed(0) + ' iops';
   if (Math.abs(val) >= 1e9) return (val / 1e9).toFixed(2) + 'G';
   if (Math.abs(val) >= 1e6) return (val / 1e6).toFixed(2) + 'M';
   if (Math.abs(val) >= 1e3) return (val / 1e3).toFixed(2) + 'K';
   return val.toFixed(2);
+};
+
+// Strip $var from panel titles
+const cleanTitle = (title: string): string => {
+  return title.replace(/\$\{[\w.]+\}/g, '').replace(/\$[\w.]+/g, '').replace(/【\s*】/g, '').replace(/【\s+/g, '【').replace(/\s+】/g, '】').replace(/\s+/g, ' ').trim();
 };
 
 const MonitorDashboardPage: React.FC = () => {
@@ -67,6 +98,7 @@ const MonitorDashboardPage: React.FC = () => {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importJson, setImportJson] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -90,18 +122,29 @@ const MonitorDashboardPage: React.FC = () => {
     const step = seconds <= 300 ? '15' : seconds <= 3600 ? '60' : seconds <= 86400 ? '120' : '300';
 
     // Parse multi-query format
+    // Primary: ;;; separator (from import)
+    // Fallback: ; separator (from manual input or old data)
     const queries: { expr: string; legend: string }[] = [];
     if (panel.query.includes(';;;')) {
       for (const part of panel.query.split(';;;')) {
-        const [expr, legend] = part.split('|||');
-        if (expr?.trim()) queries.push({ expr: expr.trim(), legend: legend || '' });
+        const sepIdx = part.indexOf('|||');
+        const expr = sepIdx >= 0 ? part.substring(0, sepIdx) : part;
+        const legend = sepIdx >= 0 ? part.substring(sepIdx + 3) : '';
+        if (expr?.trim()) queries.push({ expr: expr.trim(), legend });
+      }
+    } else if (panel.query.includes('|||')) {
+      // Old format with ; separator and ||| legend markers
+      for (const part of panel.query.split(';')) {
+        const sepIdx = part.indexOf('|||');
+        const expr = sepIdx >= 0 ? part.substring(0, sepIdx) : part;
+        const legend = sepIdx >= 0 ? part.substring(sepIdx + 3) : '';
+        if (expr?.trim()) queries.push({ expr: expr.trim(), legend });
       }
     } else {
       queries.push({ expr: panel.query, legend: panel.legend || '' });
     }
 
     // Fetch all queries in parallel
-    const results: { expr: string; legend: string; data: any }[] = [];
     const promises = queries.map(async (q) => {
       try {
         const res = await prometheusQueryRange({
@@ -131,8 +174,9 @@ const MonitorDashboardPage: React.FC = () => {
       currentDash.panels.forEach((p: any) => fetchPanelData(p));
     };
     refresh();
-    const interval = (currentDash.refresh_interval || 30) * 1000;
-    timerRef.current = setInterval(refresh, interval);
+    // Clamp refresh_interval to 10-300s
+    const intervalSec = Math.max(10, Math.min(300, currentDash.refresh_interval || 30));
+    timerRef.current = setInterval(refresh, intervalSec * 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [currentDash, timeRange, fetchPanelData]);
 
@@ -148,7 +192,7 @@ const MonitorDashboardPage: React.FC = () => {
   // Datasource CRUD
   const onDsSubmit = async (values: any) => {
     try {
-      if (editingDs) await updateDatasource(editingDs.id, values);
+      if (editingDs?.id) await updateDatasource(editingDs.id, values);
       else await createDatasource(values);
       message.success(t('success'));
       setDsModalOpen(false);
@@ -212,22 +256,21 @@ const MonitorDashboardPage: React.FC = () => {
     q = q.replace(/\[\[[\w.]+\]\]/g, '');
     // 2. Remove ${var} and $var variables
     q = q.replace(/\$\{[\w.]+\}/g, '').replace(/\$[\w.]+/g, '');
-    // 3. Clean up empty label matchers: ,origin_prometheus=~"" or {origin_prometheus=~""}
+    // 3. Clean up empty label matchers
     q = q.replace(/,?\s*\w+\s*=~?\s*["'][^"']*["']/g, (m) => {
       const val = m.match(/=~?\s*["']([^"']*)["']/);
       if (val && val[1].trim()) return m;
       if (m.startsWith(',')) return '';
       return '';
     });
-    // 4. Fix empty curly braces {}, {,}
-    q = q.replace(/\{\s*,?\s*\}/g, '');
-    q = q.replace(/\{\s+/g, '{');
-    // 5. Fix empty range vector [] -> [5m] (rate/irate/increase need a range)
+    // 4. Fix empty curly braces
+    q = q.replace(/\{\s*,?\s*\}/g, '').replace(/\{\s+/g, '{');
+    // 5. Fix empty range vector [] -> [5m]
     q = q.replace(/\[\s*\]/g, '[5m]');
     // 6. Clean up extra spaces, commas
     q = q.replace(/\s+/g, ' ').replace(/,\s*,/g, ',').replace(/\{\s*,/g, '{').replace(/,\s*\}/g, '}');
     q = q.trim();
-    // 7. Remove leading "OR " or trailing " OR"
+    // 7. Remove leading/trailing OR
     q = q.replace(/^OR\s+/i, '').replace(/\s+OR$/i, '');
     return q;
   };
@@ -241,16 +284,30 @@ const MonitorDashboardPage: React.FC = () => {
       const title = gf.title || gf.dashboard?.title || t('importedDashboard');
       const dsId = datasources.length > 0 ? datasources[0].id : undefined;
       const meerkatPanels: any[] = [];
+      const rowSections: { title: string; y: number }[] = [];
 
       // Flatten nested panels (Grafana rows contain sub-panels)
       const flatPanels: any[] = [];
       for (const p of rawPanels) {
-        if (p.type === 'row' && p.panels?.length) {
-          flatPanels.push(...p.panels);
-        } else if (p.type !== 'row') {
+        if (p.type === 'row') {
+          rowSections.push({ title: p.title || '', y: p.gridPos?.y || 0 });
+          if (p.panels?.length) {
+            flatPanels.push(...p.panels);
+          }
+        } else {
           flatPanels.push(p);
         }
       }
+
+      // Sort panels by grid position
+      flatPanels.sort((a, b) => {
+        const ay = a.gridPos?.y || 0, by = b.gridPos?.y || 0;
+        if (ay !== by) return ay - by;
+        return (a.gridPos?.x || 0) - (b.gridPos?.x || 0);
+      });
+
+      // Find max Y to normalize grid
+      const maxY = flatPanels.reduce((max, p) => Math.max(max, p.gridPos?.y || 0), 0);
 
       for (const p of flatPanels) {
         // Map Grafana panel type
@@ -258,21 +315,22 @@ const MonitorDashboardPage: React.FC = () => {
         if (p.type === 'stat' || p.type === 'singlestat') chartType = 'stat';
         else if (p.type === 'gauge') chartType = 'gauge';
         else if (p.type === 'table') chartType = 'stat';
+        else if (p.type === 'barchart' || p.type === 'bar') chartType = 'line';
 
         // Map unit
         const rawUnit = p.fieldConfig?.defaults?.unit || p.units || '';
-        const unit = rawUnit.replace('percentunit', 'percent').replace('decbytes', 'bytes').replace('Bps', 'bytes').replace('short', '').replace('none', '');
+        const unit = rawUnit.replace('percentunit', 'percent').replace('decbytes', 'bytes')
+          .replace('Bps', 'bps').replace('short', '').replace('none', '')
+          .replace('ops', 'iops').replace('packedpercent', 'percent');
 
-        // Grid: Grafana uses 24-col grid, same as us — keep original positions
+        // Grid: Grafana uses 24-col grid
         const gridW = p.gridPos?.w || 12;
         const gridH = p.gridPos?.h || 8;
         const gridX = p.gridPos?.x || 0;
         const gridY = p.gridPos?.y || 0;
 
         // Build PromQL from targets — keep ALL targets in ONE panel
-        // ECharts line chart naturally overlays multiple series
         const targets = (p.targets || []).filter((t: any) => t.expr || t.query);
-
         if (!targets.length) continue;
 
         // Collect all cleaned queries with their legends
@@ -281,41 +339,46 @@ const MonitorDashboardPage: React.FC = () => {
           let q = cleanPromQL(t.expr || t.query || '');
           if (q) queries.push({ expr: q, legend: t.legend || '' });
         }
-
         if (!queries.length) continue;
 
-        // Single query: use as-is
-        // Multiple queries: use the first as primary, store extras for multi-series rendering
-        const primaryQuery = queries[0].expr;
-        const extraQueries = queries.length > 1 ? queries.slice(1) : [];
-        // For multi-query panels, we encode extra queries so the chart renderer can use them
-        // Format: "query1|||legend1;;;query2|||legend2"
-        const queryStr = extraQueries.length > 0
+        // Multi-query encoding: "query1|||legend1;;;query2|||legend2"
+        const queryStr = queries.length > 1
           ? queries.map(q => `${q.expr}|||${q.legend}`).join(';;;')
-          : primaryQuery;
+          : queries[0].expr;
+
+        // Clean title of $variables
+        const panelTitle = cleanTitle(p.title || 'Panel');
+
+        // Find if this panel belongs to a row section (for grouping display)
+        const parentRow = rowSections.reverse().find(r => r.y <= gridY);
 
         meerkatPanels.push({
           id: `p${Date.now()}_${meerkatPanels.length}`,
-          title: p.title || 'Panel',
+          title: panelTitle,
           query: queryStr,
           unit,
           type: chartType,
           grid: { x: gridX, y: gridY, w: Math.min(gridW, 24), h: gridH },
           legend: p.description || '',
-          thresholds: (p.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
+          thresholds: (p.thresholds?.steps || p.fieldConfig?.defaults?.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
+          section: parentRow?.title || '',
         });
       }
 
       if (!meerkatPanels.length) { message.error(t('noPanelsInImport')); return; }
 
-      // Create the dashboard
+      // Create the dashboard with normalized settings
+      const gfRefresh = gf.refresh || gf.templating?.list?.[0]?.refresh || 30;
+      const refreshInterval = typeof gfRefresh === 'number' ? Math.max(10, Math.min(300, gfRefresh)) : 30;
+      const gfTimeRange = gf.time?.from || '1h';
+
       createMonitorDashboard({
         name: title,
         description: `Imported from Grafana: ${title}`,
         datasource_id: dsId,
         panels: meerkatPanels,
-        refresh_interval: gf.refresh || gf.templating?.list?.[0]?.refresh || 30,
-        time_range: gf.time?.from || '1h',
+        refresh_interval: refreshInterval,
+        time_range: normalizeTimeRange(gfTimeRange),
       }).then(() => {
         message.success(`${t('importSuccess')}: ${meerkatPanels.length} ${t('panels')}`);
         setImportModalOpen(false);
@@ -326,10 +389,11 @@ const MonitorDashboardPage: React.FC = () => {
       message.error(`${t('importFailed')}: ${e.message}`);
     }
   };
+
   const renderChart = (panel: any) => {
     const rawData = panelData[panel.id];
     if (!rawData) {
-      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80 }}><Spin /></div>;
+      return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80 }}><Spin size="small" /></div>;
     }
 
     // Normalize: both single-query (old) and multi-query (new) format
@@ -340,12 +404,12 @@ const MonitorDashboardPage: React.FC = () => {
     if (firstError?.data?.status === 'error') {
       const isConn = firstError.data.errorType === 'connection';
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80, padding: 16 }}>
-          <div style={{ fontSize: 24, marginBottom: 8 }}>{isConn ? '🔌' : '⚠️'}</div>
-          <div style={{ fontSize: 12, color: 'var(--ant-color-text-tertiary, #999)', textAlign: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 60, padding: 8 }}>
+          <div style={{ fontSize: 20, marginBottom: 4 }}>{isConn ? '🔌' : '⚠️'}</div>
+          <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary, #999)', textAlign: 'center' }}>
             {isConn ? t('datasourceConnError') : t('queryError')}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--ant-color-text-quaternary, #bbb)', textAlign: 'center', marginTop: 4, maxWidth: 300, wordBreak: 'break-all' }}>{firstError.data.error}</div>
+          <div style={{ fontSize: 9, color: 'var(--ant-color-text-quaternary, #bbb)', textAlign: 'center', marginTop: 2, maxWidth: 250, wordBreak: 'break-all' }}>{firstError.data.error}</div>
         </div>
       );
     }
@@ -361,12 +425,17 @@ const MonitorDashboardPage: React.FC = () => {
     }
 
     if (!allResults.length) {
-      return <Empty description={t('noData')} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} />;
+      return <Empty description={t('noData')} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 12 }} />;
     }
 
-    // Stat type: show multiple values in a row
+    const grid = panel.grid || { w: 12, h: 8 };
+    const isWide = grid.w >= 16;
+    const isNarrow = grid.w <= 6;
+
+    // Stat type
     if (panel.type === 'stat') {
-      const items = allResults.slice(0, 12).map((r: any, i: number) => {
+      // Group results: for multi-query, each query's results get a label
+      const items = allResults.slice(0, 24).map((r: any) => {
         const latest = r.values?.[r.values.length - 1]?.[1] || r.value?.[1] || 0;
         const numVal = parseFloat(latest);
         const thresholds = panel.thresholds || [];
@@ -374,31 +443,49 @@ const MonitorDashboardPage: React.FC = () => {
         for (const th of thresholds) {
           if (numVal >= th.value) color = th.color;
         }
-        const label = r._legend || Object.values(r.metric || {}).filter((v: any) => typeof v === 'string' && v !== '').join(' · ') || '';
+        // Build label from legend or metric labels
+        let label = r._legend || '';
+        if (!label) {
+          const labels = Object.entries(r.metric || {}).filter(([k, v]) => typeof v === 'string' && v !== '' && k !== '__name__');
+          label = labels.map(([, v]) => v).join(' · ');
+        }
         return { numVal, color, label };
       });
 
-      if (items.length <= 2) {
-        // 1-2 values: big display
+      // For Grafana-style "overview table" panels with many stats, show as table rows
+      if (items.length > 6) {
+        const cols = isNarrow ? 2 : isWide ? 6 : 4;
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 80, gap: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 4, padding: 2, height: '100%', alignContent: 'center' }}>
+            {items.map((item, i) => (
+              <div key={i} style={{ textAlign: 'center', padding: '2px 0' }}>
+                <div style={{ fontSize: isNarrow ? 13 : 16, fontWeight: 700, color: item.color, lineHeight: 1.2 }}>{formatValue(item.numVal, panel.unit)}</div>
+                {item.label && <div style={{ fontSize: 8, color: 'var(--ant-color-text-tertiary, #999)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{item.label}</div>}
+              </div>
+            ))}
+          </div>
+        );
+      }
+
+      if (items.length <= 2) {
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 60, gap: 2 }}>
             {items.map((item, i) => (
               <React.Fragment key={i}>
-                <div style={{ fontSize: items.length === 1 ? 36 : 28, fontWeight: 700, color: item.color }}>{formatValue(item.numVal, panel.unit)}</div>
-                {item.label && <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary, #999)' }}>{item.label}</div>}
+                <div style={{ fontSize: items.length === 1 ? 32 : 24, fontWeight: 700, color: item.color, lineHeight: 1.1 }}>{formatValue(item.numVal, panel.unit)}</div>
+                {item.label && <div style={{ fontSize: 10, color: 'var(--ant-color-text-tertiary, #999)' }}>{item.label}</div>}
               </React.Fragment>
             ))}
           </div>
         );
       }
 
-      // 3+ values: grid layout
-      const cols = Math.min(items.length, 4);
+      const cols = isNarrow ? 2 : 3;
       return (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8, padding: 4, height: '100%', alignContent: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6, padding: 4, height: '100%', alignContent: 'center' }}>
           {items.map((item, i) => (
             <div key={i} style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: item.color }}>{formatValue(item.numVal, panel.unit)}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: item.color }}>{formatValue(item.numVal, panel.unit)}</div>
               {item.label && <div style={{ fontSize: 9, color: 'var(--ant-color-text-tertiary, #999)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>}
             </div>
           ))}
@@ -406,89 +493,164 @@ const MonitorDashboardPage: React.FC = () => {
       );
     }
 
-    // Gauge type: show first value
+    // Gauge type
     if (panel.type === 'gauge') {
       const latest = parseFloat(allResults[0]?.values?.[allResults[0].values.length - 1]?.[1] || allResults[0]?.value?.[1] || 0);
+      const gaugeMax = panel.unit === 'percent' ? 100 : Math.max(latest * 1.5, 10);
       const option = {
         series: [{
-          type: 'gauge', startAngle: 200, endAngle: -20, min: 0, max: 100,
-          progress: { show: true, width: 14 },
-          axisLine: { lineStyle: { width: 14 } },
+          type: 'gauge', startAngle: 200, endAngle: -20, min: 0, max: gaugeMax,
+          progress: { show: true, width: isNarrow ? 8 : 12 },
+          axisLine: { lineStyle: { width: isNarrow ? 8 : 12 } },
           axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
           pointer: { show: false },
-          title: { offsetCenter: [0, '60%'], fontSize: 12, color: 'var(--ant-color-text-tertiary, #999)' },
-          detail: { valueAnimation: true, fontSize: 28, offsetCenter: [0, '30%'], formatter: (v: number) => formatValue(v, panel.unit) },
-          data: [{ value: latest, name: panel.legend || panel.title }],
+          title: { offsetCenter: [0, '70%'], fontSize: 10, color: 'var(--ant-color-text-tertiary, #999)' },
+          detail: { valueAnimation: true, fontSize: isNarrow ? 18 : 24, offsetCenter: [0, '35%'], formatter: (v: number) => formatValue(v, panel.unit) },
+          data: [{ value: latest, name: panel.legend || cleanTitle(panel.title) }],
         }],
       };
-      return <ReactEChartsCore echarts={echarts} option={option} style={{ height: 180 }} notMerge lazyUpdate />;
+      return <ReactEChartsCore echarts={echarts} option={option} style={{ height: '100%', minHeight: 120 }} notMerge lazyUpdate />;
     }
 
-    // Default: line chart — overlay all series from all queries
+    // Default: line chart — overlay all series
     const series: any[] = [];
     const legendNames: string[] = [];
-    for (const r of allResults) {
-      const metricLabels = Object.values(r.metric || {}).filter((v: any) => typeof v === 'string' && v !== '').join(' · ');
-      const name = r._legend || metricLabels || panel.title;
+    // Limit series count to avoid cluttered charts
+    const maxSeries = isNarrow ? 4 : isWide ? 16 : 8;
+    const displayResults = allResults.slice(0, maxSeries);
+
+    for (const r of displayResults) {
+      const metricLabels = Object.entries(r.metric || {})
+        .filter(([k, v]) => typeof v === 'string' && v !== '' && k !== '__name__')
+        .map(([, v]) => v)
+        .join(' · ');
+      const name = r._legend || metricLabels || cleanTitle(panel.title);
       legendNames.push(name);
       series.push({
         name, type: 'line', smooth: true, symbol: 'none',
         lineStyle: { width: 1.5 },
-        areaStyle: { opacity: 0.08 },
+        areaStyle: { opacity: 0.06 },
         data: (r.values || []).map((v: any) => [v[0] * 1000, parseFloat(v[1])]),
       });
     }
 
+    const showLegend = legendNames.length > 1 && legendNames.length <= 10;
     const option = {
-      tooltip: { trigger: 'axis', textStyle: { fontSize: 11 }, formatter: (params: any) => {
-        const time = new Date(params[0].value[0]).toLocaleString();
-        let html = `<div style="font-size:11px;color:#999">${time}</div>`;
-        for (const p of params) {
-          html += `<div>${p.marker} ${p.seriesName}: <b>${formatValue(p.value[1], panel.unit)}</b></div>`;
+      tooltip: { trigger: 'axis', textStyle: { fontSize: 10 }, confine: true, formatter: (params: any) => {
+        const time = new Date(params[0].value[0]).toLocaleTimeString();
+        let html = `<div style="font-size:10px;color:#999">${time}</div>`;
+        for (const p of params.slice(0, 6)) {
+          html += `<div>${p.marker} ${p.seriesName.substring(0, 20)}: <b>${formatValue(p.value[1], panel.unit)}</b></div>`;
         }
+        if (params.length > 6) html += `<div style="color:#999">...+${params.length - 6} more</div>`;
         return html;
       }},
-      legend: legendNames.length > 1 ? { data: legendNames, textStyle: { fontSize: 10 }, type: 'scroll', bottom: 0 } : undefined,
-      grid: { left: 50, right: 16, top: 8, bottom: legendNames.length > 1 ? 30 : 8 },
-      xAxis: { type: 'time', axisLabel: { fontSize: 10, color: 'var(--ant-color-text-tertiary, #999)' }, splitLine: { show: false } },
-      yAxis: { type: 'value', axisLabel: { fontSize: 10, color: 'var(--ant-color-text-tertiary, #999)', formatter: (v: number) => formatValue(v, panel.unit) }, splitLine: { lineStyle: { type: 'dashed', opacity: 0.3 } } },
+      legend: showLegend ? { data: legendNames, textStyle: { fontSize: 9 }, type: 'scroll', bottom: 0, icon: 'line' } : undefined,
+      grid: { left: 45, right: 12, top: 6, bottom: showLegend ? 26 : 6 },
+      xAxis: { type: 'time', axisLabel: { fontSize: 9, color: 'var(--ant-color-text-tertiary, #999)', formatter: '{HH}:{mm}' }, splitLine: { show: false } },
+      yAxis: { type: 'value', axisLabel: { fontSize: 9, color: 'var(--ant-color-text-tertiary, #999)', formatter: (v: number) => formatValue(v, panel.unit) }, splitLine: { lineStyle: { type: 'dashed', opacity: 0.2 } } },
       dataZoom: [{ type: 'inside' }],
       series,
     };
 
-    return <ReactEChartsCore echarts={echarts} option={option} style={{ height: '100%', minHeight: 150 }} notMerge lazyUpdate />;
+    return <ReactEChartsCore echarts={echarts} option={option} style={{ height: '100%', minHeight: 100 }} notMerge lazyUpdate />;
   };
 
-  // Panel grid layout
-  const panelGrid = currentDash?.panels?.length ? (
-    <Row gutter={[12, 12]}>
-      {currentDash.panels.map((panel: any) => {
-        const grid = panel.grid || { x: 0, y: 0, w: 12, h: 4 };
-        const span = Math.min(grid.w, 24);
-        return (
-          <Col key={panel.id} span={span}>
-            <Card
-              size="small"
-              title={<Text ellipsis style={{ maxWidth: '80%', fontSize: 13 }}>{panel.title}</Text>}
-              extra={
-                <Space size={4}>
-                  <Tooltip title={panel.query}><Tag style={{ maxWidth: 120, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} color="blue">{panel.query}</Tag></Tooltip>
-                  <Button size="small" type="text" icon={<EditOutlined />} onClick={() => { setEditingPanel(panel); panelForm.setFieldsValue(panel); setPanelModalOpen(true); }} />
-                  <Popconfirm title={t('deleteConfirm')} onConfirm={() => deletePanel(panel.id)}>
-                    <Button size="small" type="text" danger icon={<DeleteOutlined />} />
-                  </Popconfirm>
-                </Space>
-              }
-              style={{ minHeight: grid.h * 30 + 60 }}
-              styles={{ body: { padding: '8px 12px', height: 'calc(100% - 46px)' } }}
-            >
-              {renderChart(panel)}
-            </Card>
-          </Col>
-        );
-      })}
-    </Row>
-  ) : (
+  // CSS Grid layout — preserves Grafana gridPos (24-col)
+  const panelGrid = currentDash?.panels?.length ? (() => {
+    // Group panels by section for row headers
+    const sections: { title: string; panels: any[] }[] = [];
+    const noSection: any[] = [];
+
+    for (const panel of currentDash.panels) {
+      if (panel.section) {
+        let sec = sections.find(s => s.title === panel.section);
+        if (!sec) { sec = { title: panel.section, panels: [] }; sections.push(sec); }
+        sec.panels.push(panel);
+      } else {
+        noSection.push(panel);
+      }
+    }
+
+    // If all panels have no section, just render flat grid
+    const hasSections = sections.length > 0;
+
+    const renderPanelCard = (panel: any) => {
+      const grid = panel.grid || { x: 0, y: 0, w: 12, h: 4 };
+      const wPct = (Math.min(grid.w, 24) / 24) * 100;
+      const hPx = grid.h * 30 + 40;
+      const title = cleanTitle(panel.title || 'Panel');
+      const queryPreview = panel.query?.includes(';;;')
+        ? panel.query.split(';;;').length + ' queries'
+        : (panel.query || '').substring(0, 60);
+
+      return (
+        <div key={panel.id} style={{
+          width: `${wPct}%`,
+          minHeight: hPx,
+          padding: '0 6px 12px',
+          display: 'inline-block',
+          verticalAlign: 'top',
+        }}>
+          <Card
+            size="small"
+            title={<Text ellipsis style={{ maxWidth: '70%', fontSize: 12, fontWeight: 600 }}>{title}</Text>}
+            extra={
+              <Space size={2}>
+                <Tooltip title={queryPreview}><Tag style={{ maxWidth: 80, fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} color="blue">{queryPreview}</Tag></Tooltip>
+                <Button size="small" type="text" icon={<EditOutlined style={{ fontSize: 11 }} />} onClick={() => { setEditingPanel(panel); panelForm.setFieldsValue(panel); setPanelModalOpen(true); }} />
+                <Popconfirm title={t('deleteConfirm')} onConfirm={() => deletePanel(panel.id)}>
+                  <Button size="small" type="text" danger icon={<DeleteOutlined style={{ fontSize: 11 }} />} />
+                </Popconfirm>
+              </Space>
+            }
+            styles={{ body: { padding: '6px 8px', height: `calc(100% - 40px)`, overflow: 'hidden' } }}
+            style={{ height: '100%' }}
+          >
+            {renderChart(panel)}
+          </Card>
+        </div>
+      );
+    };
+
+    const renderSection = (title: string, panels: any[]) => (
+      <div key={title} style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ant-color-text-secondary, #666)', padding: '8px 6px 4px', borderBottom: '1px solid var(--ant-color-border, #f0f0f0)', marginBottom: 8 }}>
+          {title}
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+          {panels.map(renderPanelCard)}
+        </div>
+      </div>
+    );
+
+    // Sort all panels by grid position and render
+    const sortedPanels = [...currentDash.panels].sort((a, b) => {
+      const ay = a.grid?.y || 0, by = b.grid?.y || 0;
+      return ay !== by ? ay - by : (a.grid?.x || 0) - (b.grid?.x || 0);
+    });
+
+    if (hasSections) {
+      // Render with section headers
+      return (
+        <div>
+          {sections.map(sec => renderSection(sec.title, sec.panels))}
+          {noSection.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+              {noSection.map(renderPanelCard)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Flat layout — respect grid positions by wrapping with width percentages
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+        {sortedPanels.map(renderPanelCard)}
+      </div>
+    );
+  })() : (
     <Empty description={t('noPanels')} style={{ padding: 60 }}>
       <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingPanel(null); panelForm.resetFields(); setPanelModalOpen(true); }}>{t('addPanel')}</Button>
     </Empty>
@@ -613,7 +775,7 @@ const MonitorDashboardPage: React.FC = () => {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="refresh_interval" label={t('refreshIntervalSec')}>
-                <InputNumber min={5} max={300} style={{ width: '100%' }} />
+                <InputNumber min={10} max={300} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
@@ -642,7 +804,8 @@ const MonitorDashboardPage: React.FC = () => {
                 <Select allowClear options={[
                   { label: 'none', value: '' }, { label: '%', value: 'percent' },
                   { label: 'bytes', value: 'bytes' }, { label: 'seconds', value: 'seconds' },
-                  { label: 'req/s', value: 'reqps' }, { label: '°C', value: 'celsius' },
+                  { label: 'bps', value: 'bps' }, { label: '°C', value: 'celsius' },
+                  { label: 'iops', value: 'iops' }, { label: 'req/s', value: 'reqps' },
                 ]} />
               </Form.Item>
             </Col>
@@ -652,7 +815,7 @@ const MonitorDashboardPage: React.FC = () => {
           </Row>
           <Row gutter={16}>
             <Col span={6}><Form.Item name={['grid', 'w']} label={t('width')}><InputNumber min={4} max={24} style={{ width: '100%' }} /></Form.Item></Col>
-            <Col span={6}><Form.Item name={['grid', 'h']} label={t('height')}><InputNumber min={2} max={12} style={{ width: '100%' }} /></Form.Item></Col>
+            <Col span={6}><Form.Item name={['grid', 'h']} label={t('height')}><InputNumber min={2} max={20} style={{ width: '100%' }} /></Form.Item></Col>
             <Col span={6}><Form.Item name={['grid', 'x']} label="X"><InputNumber min={0} max={24} style={{ width: '100%' }} /></Form.Item></Col>
             <Col span={6}><Form.Item name={['grid', 'y']} label="Y"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
