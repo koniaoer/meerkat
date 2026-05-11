@@ -114,10 +114,10 @@ const RemediationTemplates: React.FC = () => {
   const renderConfigPreview = (configTemplate: string) => {
     try {
       const obj = JSON.parse(configTemplate);
-      if (obj.command) return <code style={{ fontSize: 11, background: 'var(--ant-color-bg-spotlight, #f5f5f5)', padding: '2px 6px', borderRadius: 4 }}>{obj.command}</code>;
-      if (obj.url) return <code style={{ fontSize: 11, background: 'var(--ant-color-bg-spotlight, #f5f5f5)', padding: '2px 6px', borderRadius: 4 }}>{obj.method || 'GET'} {obj.url}</code>;
-      return <code style={{ fontSize: 11 }}>{JSON.stringify(obj).slice(0, 60)}</code>;
-    } catch { return <code style={{ fontSize: 11 }}>{configTemplate.slice(0, 60)}</code>; }
+      if (obj.command) return <code style={{ fontSize: 11, background: 'var(--ant-color-bg-text-active, rgba(0,0,0,0.06))', color: 'var(--ant-color-text-secondary, #666)', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--ant-color-border, #d9d9d9)' }}>{obj.command}</code>;
+      if (obj.url) return <code style={{ fontSize: 11, background: 'var(--ant-color-bg-text-active, rgba(0,0,0,0.06))', color: 'var(--ant-color-text-secondary, #666)', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--ant-color-border, #d9d9d9)' }}>{obj.method || 'GET'} {obj.url}</code>;
+      return <code style={{ fontSize: 11, background: 'var(--ant-color-bg-text-active, rgba(0,0,0,0.06))', color: 'var(--ant-color-text-secondary, #666)', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--ant-color-border, #d9d9d9)' }}>{JSON.stringify(obj).slice(0, 60)}</code>;
+    } catch { return <code style={{ fontSize: 11, background: 'var(--ant-color-bg-text-active, rgba(0,0,0,0.06))', color: 'var(--ant-color-text-secondary, #666)', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--ant-color-border, #d9d9d9)' }}>{configTemplate.slice(0, 60)}</code>; }
   };
 
   return (
@@ -146,33 +146,33 @@ const RemediationTemplates: React.FC = () => {
       {/* Stats summary */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
         <Col span={6}>
-          <Card size="small" bordered={false}>
+          <Card size="small" bordered={false} style={{ background: 'var(--ant-color-bg-elevated)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#999' }}>{t('totalAlerts')}</span>
+              <span style={{ color: 'var(--ant-color-text-secondary)' }}>{t('totalAlerts')}</span>
               <Badge count={templates.length} style={{ backgroundColor: '#1890ff' }} />
             </div>
           </Card>
         </Col>
         <Col span={6}>
-          <Card size="small" bordered={false}>
+          <Card size="small" bordered={false} style={{ background: 'var(--ant-color-bg-elevated)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#999' }}>{t('active')}</span>
+              <span style={{ color: 'var(--ant-color-text-secondary)' }}>{t('active')}</span>
               <Badge count={templates.filter(t => t.is_active).length} style={{ backgroundColor: '#52c41a' }} />
             </div>
           </Card>
         </Col>
         <Col span={6}>
-          <Card size="small" bordered={false}>
+          <Card size="small" bordered={false} style={{ background: 'var(--ant-color-bg-elevated)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#999' }}>{t('autoExecute')}</span>
+              <span style={{ color: 'var(--ant-color-text-secondary)' }}>{t('autoExecute')}</span>
               <Badge count={templates.filter(t => !t.requires_approval).length} style={{ backgroundColor: '#faad14' }} />
             </div>
           </Card>
         </Col>
         <Col span={6}>
-          <Card size="small" bordered={false}>
+          <Card size="small" bordered={false} style={{ background: 'var(--ant-color-bg-elevated)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#999' }}>{t('builtIn')}</span>
+              <span style={{ color: 'var(--ant-color-text-secondary)' }}>{t('builtIn')}</span>
               <Badge count={8} style={{ backgroundColor: '#722ed1' }} />
             </div>
           </Card>
@@ -210,7 +210,7 @@ const RemediationTemplates: React.FC = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tmpl.name}</div>
-                          {tmpl.description && <div style={{ fontSize: 11, color: '#999', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tmpl.description}</div>}
+                          {tmpl.description && <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary, #999)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tmpl.description}</div>}
                         </div>
                         <Space size={4}>
                           <Tooltip title={t('detail')}><Button size="small" type="text" icon={<EyeOutlined />} onClick={() => showDetail(tmpl)} /></Tooltip>
@@ -252,7 +252,7 @@ const RemediationTemplates: React.FC = () => {
                           style={{ flex: 1, marginBottom: 0 }}
                           format={() => ''}
                         />
-                        <span style={{ fontSize: 11, color: '#999', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary, #999)', whiteSpace: 'nowrap' }}>
                           {tmpl.success_rate} · {t('usageCount')}: {tmpl.usage_count || 0}
                         </span>
                       </div>
@@ -284,11 +284,11 @@ const RemediationTemplates: React.FC = () => {
                 {viewing.is_active ? <Tag color="green">{t('active')}</Tag> : <Tag>{t('inactive')}</Tag>}
               </Space>
             </div>
-            {viewing.description && <p style={{ color: '#666', margin: '8px 0' }}>{viewing.description}</p>}
+            {viewing.description && <p style={{ color: 'var(--ant-color-text-secondary, #666)', margin: '8px 0' }}>{viewing.description}</p>}
 
             <div style={{ marginBottom: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('configTemplate')}</div>
-              <pre style={{ background: 'var(--ant-color-bg-spotlight, #f5f5f5)', padding: 12, borderRadius: 6, fontSize: 12, overflow: 'auto' }}>
+              <pre style={{ background: 'var(--ant-color-bg-text-active, rgba(0,0,0,0.06))', color: 'var(--ant-color-text, #333)', padding: 12, borderRadius: 6, fontSize: 12, overflow: 'auto', border: '1px solid var(--ant-color-border, #d9d9d9)' }}>
                 {(() => { try { return JSON.stringify(JSON.parse(viewing.config_template), null, 2); } catch { return viewing.config_template; } })()}
               </pre>
             </div>
@@ -296,11 +296,11 @@ const RemediationTemplates: React.FC = () => {
             <Row gutter={16}>
               <Col span={12}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('matchLabels')}</div>
-                {(() => { const ml = JSON.parse(viewing.match_labels || '{}'); return Object.keys(ml).length ? Object.entries(ml).map(([k, v]) => <Tag key={k}>{k}={v as string}</Tag>) : <span style={{ color: '#999' }}>-</span>; })()}
+                {(() => { const ml = JSON.parse(viewing.match_labels || '{}'); return Object.keys(ml).length ? Object.entries(ml).map(([k, v]) => <Tag key={k}>{k}={v as string}</Tag>) : <span style={{ color: 'var(--ant-color-text-tertiary, #999)' }}>-</span>; })()}
               </Col>
               <Col span={12}>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>{t('matchKeywords')}</div>
-                {viewing.match_keywords ? viewing.match_keywords.split(',').map((kw: string) => <Tag key={kw}>{kw.trim()}</Tag>) : <span style={{ color: '#999' }}>-</span>}
+                {viewing.match_keywords ? viewing.match_keywords.split(',').map((kw: string) => <Tag key={kw}>{kw.trim()}</Tag>) : <span style={{ color: 'var(--ant-color-text-tertiary, #999)' }}>-</span>}
               </Col>
             </Row>
 
