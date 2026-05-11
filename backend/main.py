@@ -1103,6 +1103,17 @@ async def chat_endpoint(req: schemas.ChatRequest, db: Session = Depends(get_db),
 def get_chat_history(session_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     return crud.get_chat_history(db, session_id)
 
+@app.get("/api/v1/chat-sessions")
+def list_chat_sessions(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    from chatops_engine import get_chat_sessions
+    return get_chat_sessions(db)
+
+@app.delete("/api/v1/chat-sessions/{session_id}")
+def delete_chat_session(session_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    db.query(models.ChatMessage).filter(models.ChatMessage.session_id == session_id).delete()
+    db.commit()
+    return {"status": "deleted"}
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -15,7 +15,8 @@ Understands natural language commands and maps them to actions:
 import re
 import json
 import uuid
-import crud, models, schemas, ai_service
+import crud, models, schemas
+from auth import decrypt_value
 from logger import logger
 from datetime import datetime
 
@@ -70,6 +71,37 @@ def parse_command(text: str):
         return {"action": "firing_alerts"}
 
     return None
+
+
+def _get_decrypted_api_key(config):
+    """Get decrypted API key from model config."""
+    if not config or not config.api_key:
+        return None
+    key = config.api_key
+    # If it looks encrypted (gAAAAA from Fernet), decrypt it
+    if key.startswith('gAAAA'):
+        try:
+            key = decrypt_value(key)
+        except Exception:
+            logger.warning("Failed to decrypt API key for ChatOps AI")
+            return None
+    return key
+
+
+async def _call_ai(config, system_prompt: str, history_msgs: list, message: str) -> str:
+    """Call AI model using the active model config with decrypted API key."""
+    api_key = _get_decrypted_api_key(config)
+    if not api_key:
+        return "⚠️ API Key 无效或无法解密，请检查 AI 模型配置。"
+
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=api_key, base_url=config.base_url)
+    resp = await client.chat.completions.create(
+        model=config.model_name,
+        messages=[{"role": "system", "content": system_prompt}] + history_msgs + [{"role": "user", "content": message}],
+        temperature=0.7, max_tokens=1000,
+    )
+    return resp.choices[0].message.content
 
 
 async def handle_chatops(db, message: str, session_id: str = None, alert_id: int = None, user: models.User = None):
@@ -245,14 +277,7 @@ async def handle_chatops(db, message: str, session_id: str = None, alert_id: int
 
 请用中文简洁回答。"""
 
-                from openai import AsyncOpenAI
-                client = AsyncOpenAI(api_key=config.api_key, base_url=config.base_url)
-                resp = await client.chat.completions.create(
-                    model=config.model_name,
-                    messages=[{"role": "system", "content": system_prompt}] + history_msgs + [{"role": "user", "content": message}],
-                    temperature=0.7, max_tokens=1000,
-                )
-                response_text = resp.choices[0].message.content
+                response_text = await _call_ai(config, system_prompt, history_msgs, message)
 
         except Exception as e:
             logger.error("ChatOps AI error: %s", e)
@@ -262,3 +287,36 @@ async def handle_chatops(db, message: str, session_id: str = None, alert_id: int
     msg = crud.save_chat_message(db, session_id, "assistant", response_text,
                                   action_taken=action_taken, alert_id=alert_id)
     return msg
+
+
+def get_chat_sessions(db) -> list:
+    """Get all chat sessions with last message preview."""
+    from sqlalchemy import func
+    # Group by session_id, get latest message per session
+    sessions = db.query(
+        models.ChatMessage.session_id,
+        func.max(models.ChatMessage.created_at).label('last_at'),
+        func.count(models.ChatMessage.id).label('msg_count'),
+    ).group_by(models.ChatMessage.session_id).order_by(
+        func.max(models.ChatMessage.created_at).desc()
+    ).limit(20).all()
+
+    result = []
+    for s in sessions:
+        # Get first user message as title
+        first = db.query(models.ChatMessage).filter(
+            models.ChatMessage.session_id == s.session_id,
+            models.ChatMessage.role == "user"
+        ).order_by(models.ChatMessage.created_at.asc()).first()
+        # Get last message as preview
+        last = db.query(models.ChatMessage).filter(
+            models.ChatMessage.session_id == s.session_id
+        ).order_by(models.ChatMessage.created_at.desc()).first()
+        result.append({
+            "session_id": s.session_id,
+            "title": first.content[:50] if first else "新对话",
+            "preview": last.content[:80] if last else "",
+            "last_at": s.last_at.isoformat() if s.last_at else None,
+            "msg_count": s.msg_count,
+        })
+    return result

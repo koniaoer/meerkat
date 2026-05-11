@@ -118,5 +118,7 @@ export const markArticleHelpful = (id: number) => api.post(`/knowledge/${id}/hel
 // ChatOps
 export const sendChatMessage = (data: { message: string; session_id?: string; alert_id?: number }) => api.post('/chat', data);
 export const getChatHistory = (sessionId: string) => api.get(`/chat/${sessionId}`);
+export const getChatSessions = () => api.get('/chat-sessions');
+export const deleteChatSession = (sessionId: string) => api.delete(`/chat-sessions/${sessionId}`);
 
 export default api;
