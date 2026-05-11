@@ -132,8 +132,8 @@ const ModelConfigPage: React.FC = () => {
           <Form.Item name="base_url" label={t('baseUrl')} rules={[{ required: true }]}>
             <Input placeholder="e.g. https://api.openai.com/v1" />
           </Form.Item>
-          <Form.Item name="api_key" label={t('apiKey')} rules={[{ required: true }]}>
-            <Input.Password placeholder="Enter your API Key" />
+          <Form.Item name="api_key" label={t('apiKey')} rules={[{ required: true }]} extra={<span style={{ color: '#faad14', fontSize: 11 }}>💡 {editingConfig ? (t('leaveUnchanged') || '留空或保持掩码不变，输入新值则更新') : ''}</span>}>
+            <Input.Password placeholder={editingConfig ? (t('leaveUnchanged') || '留空保持不变，或输入新的 API Key') : 'Enter your API Key'} />
           </Form.Item>
           <Form.Item name="is_active" label={t('isActive')} valuePropName="checked">
             <Switch />
