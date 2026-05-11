@@ -210,23 +210,24 @@ const MonitorDashboardPage: React.FC = () => {
   const cleanPromQL = (q: string): string => {
     // 1. Remove [[var]] variables
     q = q.replace(/\[\[[\w.]+\]\]/g, '');
-    // 2. Remove ${var} and $var variables (but NOT $ inside PromQL like label values)
+    // 2. Remove ${var} and $var variables
     q = q.replace(/\$\{[\w.]+\}/g, '').replace(/\$[\w.]+/g, '');
     // 3. Clean up empty label matchers: ,origin_prometheus=~"" or {origin_prometheus=~""}
-    //    Match: key=~""  or  key=""  with empty value after variable removal
     q = q.replace(/,?\s*\w+\s*=~?\s*["'][^"']*["']/g, (m) => {
       const val = m.match(/=~?\s*["']([^"']*)["']/);
-      if (val && val[1].trim()) return m; // keep non-empty matchers
+      if (val && val[1].trim()) return m;
       if (m.startsWith(',')) return '';
-      return ''; // remove empty matcher
+      return '';
     });
     // 4. Fix empty curly braces {}, {,}
     q = q.replace(/\{\s*,?\s*\}/g, '');
     q = q.replace(/\{\s+/g, '{');
-    // 5. Clean up extra spaces, commas, OR at start
+    // 5. Fix empty range vector [] -> [5m] (rate/irate/increase need a range)
+    q = q.replace(/\[\s*\]/g, '[5m]');
+    // 6. Clean up extra spaces, commas
     q = q.replace(/\s+/g, ' ').replace(/,\s*,/g, ',').replace(/\{\s*,/g, '{').replace(/,\s*\}/g, '}');
     q = q.trim();
-    // 6. Remove leading "OR " or trailing " OR"
+    // 7. Remove leading "OR " or trailing " OR"
     q = q.replace(/^OR\s+/i, '').replace(/\s+OR$/i, '');
     return q;
   };
