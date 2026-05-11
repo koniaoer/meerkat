@@ -89,6 +89,8 @@ export const deleteSuppressionRule = (id: number) => api.delete(`/suppression-ru
 
 // Audit Logs
 export const getAuditLogs = (params?: any) => api.get('/audit-logs', { params });
+export const deleteAuditLog = (id: number) => api.delete(`/audit-logs/${id}`);
+export const batchDeleteAuditLogs = (ids: number[]) => api.post('/audit-logs/batch-delete', { ids });
 
 // On-Call Schedules
 export const getOnCallSchedules = () => api.get('/oncall-schedules');

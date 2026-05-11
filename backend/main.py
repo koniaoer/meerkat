@@ -1026,6 +1026,26 @@ def list_audit_logs(
 ):
     return crud.get_audit_logs(db, skip=skip, limit=limit, action=action, resource_type=resource_type)
 
+@app.delete("/api/v1/audit-logs/{log_id}")
+def delete_audit_log(log_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("admin"))):
+    db_log = db.query(models.AuditLog).filter(models.AuditLog.id == log_id).first()
+    if not db_log:
+        raise HTTPException(status_code=404, detail="Audit log not found")
+    db.delete(db_log)
+    db.commit()
+    return {"status": "deleted"}
+
+@app.post("/api/v1/audit-logs/batch-delete")
+def batch_delete_audit_logs(request: schemas.BatchDeleteRequest, db: Session = Depends(get_db), _user: models.User = Depends(require_role("admin"))):
+    deleted = 0
+    for lid in request.ids:
+        db_log = db.query(models.AuditLog).filter(models.AuditLog.id == lid).first()
+        if db_log:
+            db.delete(db_log)
+            deleted += 1
+    db.commit()
+    return {"status": "deleted", "count": deleted}
+
 # ─── On-Call Schedule Endpoints ────────────────────────────────────────────
 @app.get("/api/v1/oncall-schedules", response_model=List[schemas.OnCallScheduleResponse])
 def list_oncall_schedules(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
