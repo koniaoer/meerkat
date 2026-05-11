@@ -69,6 +69,7 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{ status?: string; severity?: string; acknowledged?: string }>({});
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
 
   const fetchStats = async () => {
     try { const res = await getDashboardStats(); setStats(res.data); } catch (e) { console.error(e); }
@@ -239,7 +240,15 @@ const Dashboard: React.FC = () => {
       </Row>
 
       {/* ── Alert table ────────────────────────────────────────────── */}
-      <Table dataSource={alerts} columns={columns} rowKey="id" loading={loading} size="small" pagination={{ pageSize: 10 }}
+      <Table dataSource={alerts} columns={columns} rowKey="id" loading={loading} size="small"
+        pagination={{
+          current: pagination.current,
+          pageSize: pagination.pageSize,
+          showSizeChanger: true,
+          showTotal: (total) => `共 ${total} 条`,
+          onChange: (page, size) => setPagination({ current: page, pageSize: size }),
+          onShowSizeChange: (current, size) => setPagination({ current: 1, pageSize: size }),
+        }}
         rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as number[]) }}
         onRow={r => ({ onClick: () => navigate(`/alerts/${r.id}`), style: { cursor: 'pointer' } })} />
     </div>

@@ -39,6 +39,7 @@ const RemediationActions: React.FC = () => {
   const [detailModal, setDetailModal] = useState<any>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [searchText, setSearchText] = useState('');
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 15 });
 
   // Filtered actions derived from allActions + filters + search
   const actions = React.useMemo(() => {
@@ -213,11 +214,11 @@ const RemediationActions: React.FC = () => {
             allowClear
             style={{ width: 200 }}
             value={searchText}
-            onChange={e => setSearchText(e.target.value)}
+            onChange={e => { setSearchText(e.target.value); setPagination(p => ({ ...p, current: 1 })); }}
           />
         </Col>
         <Col>
-          <Select allowClear placeholder={t('statusFilter')} style={{ width: 130 }} onChange={(val) => setFilters({ ...filters, status: val })} value={filters.status}
+          <Select allowClear placeholder={t('statusFilter')} style={{ width: 130 }} onChange={(val) => { setFilters({ ...filters, status: val }); setPagination(p => ({ ...p, current: 1 })); }} value={filters.status}
             options={[
               { value: 'pending', label: '⏳ Pending' }, { value: 'approved', label: '✅ Approved' },
               { value: 'executing', label: '⚡ Executing' }, { value: 'completed', label: '✅ Completed' },
@@ -227,7 +228,7 @@ const RemediationActions: React.FC = () => {
           />
         </Col>
         <Col>
-          <Select allowClear placeholder={t('riskLevelFilter')} style={{ width: 130 }} onChange={(val) => setFilters({ ...filters, risk_level: val })} value={filters.risk_level}
+          <Select allowClear placeholder={t('riskLevelFilter')} style={{ width: 130 }} onChange={(val) => { setFilters({ ...filters, risk_level: val }); setPagination(p => ({ ...p, current: 1 })); }} value={filters.risk_level}
             options={[
               { value: 'low', label: '🟢 Low' }, { value: 'medium', label: '🟡 Medium' }, { value: 'high', label: '🔴 High' },
             ]}
@@ -254,7 +255,14 @@ const RemediationActions: React.FC = () => {
           selectedRowKeys,
           onChange: (keys) => setSelectedRowKeys(keys as number[]),
         }}
-        pagination={{ pageSize: 15, showSizeChanger: true, showTotal: (total) => `共 ${total} 条` }}
+        pagination={{
+          current: pagination.current,
+          pageSize: pagination.pageSize,
+          showSizeChanger: true,
+          showTotal: (total) => `共 ${total} 条`,
+          onChange: (page, size) => setPagination({ current: page, pageSize: size }),
+          onShowSizeChange: (current, size) => setPagination({ current: 1, pageSize: size }),
+        }}
       />
 
       {/* Detail Modal */}
