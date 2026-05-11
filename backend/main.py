@@ -774,9 +774,9 @@ def delete_alert(alert_id: int, db: Session = Depends(get_db), _user: models.Use
     return {"status": "deleted"}
 
 @app.post("/api/v1/alerts/batch-delete")
-def batch_delete_alerts(ids: list[int] = [], db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+def batch_delete_alerts(request: schemas.BatchDeleteRequest, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     deleted = 0
-    for aid in ids:
+    for aid in request.ids:
         db_alert = db.query(models.Alert).filter(models.Alert.id == aid).first()
         if db_alert:
             db.query(models.RemediationAction).filter(models.RemediationAction.alert_id == aid).delete()
@@ -785,7 +785,7 @@ def batch_delete_alerts(ids: list[int] = [], db: Session = Depends(get_db), _use
     db.commit()
     crud.create_audit_log(db, username=_user.username, user_id=_user.id,
                           action="alert.batch_delete", resource_type="alert",
-                          detail=json.dumps({"count": deleted, "ids": ids}, ensure_ascii=False))
+                          detail=json.dumps({"count": deleted, "ids": request.ids}, ensure_ascii=False))
     return {"status": "deleted", "count": deleted}
 
 
@@ -940,9 +940,9 @@ def delete_remediation_action(action_id: int, db: Session = Depends(get_db), _us
     return {"status": "deleted"}
 
 @app.post("/api/v1/remediation-actions/batch-delete")
-def batch_delete_remediation_actions(ids: list[int] = [], db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+def batch_delete_remediation_actions(request: schemas.BatchDeleteRequest, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     deleted = 0
-    for aid in ids:
+    for aid in request.ids:
         db_action = crud.get_remediation_action(db, aid)
         if db_action:
             db.delete(db_action)
@@ -950,7 +950,7 @@ def batch_delete_remediation_actions(ids: list[int] = [], db: Session = Depends(
     db.commit()
     crud.create_audit_log(db, username=_user.username, user_id=_user.id,
                           action="remediation_action.batch_delete", resource_type="remediation_action",
-                          detail=json.dumps({"count": deleted, "ids": ids}, ensure_ascii=False))
+                          detail=json.dumps({"count": deleted, "ids": request.ids}, ensure_ascii=False))
     return {"status": "deleted", "count": deleted}
 
 

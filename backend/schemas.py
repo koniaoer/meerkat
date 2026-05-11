@@ -400,3 +400,6 @@ class ChatResponse(BaseModel):
     created_at: datetime
     class Config:
         from_attributes = True
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[int] = []
