@@ -1255,6 +1255,183 @@ def delete_chat_session(session_id: str, db: Session = Depends(get_db), _user: m
     db.commit()
     return {"status": "deleted"}
 
+# ─── Prometheus DataSource Endpoints ─────────────────────────────────────
+@app.get("/api/v1/datasources", response_model=List[schemas.PrometheusDataSourceResponse])
+def list_datasources(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    return db.query(models.PrometheusDataSource).all()
+
+@app.post("/api/v1/datasources", response_model=schemas.PrometheusDataSourceResponse)
+def create_datasource(ds: schemas.PrometheusDataSourceCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("admin"))):
+    existing = db.query(models.PrometheusDataSource).filter(models.PrometheusDataSource.name == ds.name).first()
+    if existing:
+        raise HTTPException(400, "DataSource name already exists")
+    obj = models.PrometheusDataSource(name=ds.name, url=ds.url.rstrip("/"), is_default=ds.is_default, headers=ds.headers)
+    if ds.is_default:
+        for o in db.query(models.PrometheusDataSource).filter(models.PrometheusDataSource.is_default == True).all():
+            o.is_default = False
+    db.add(obj); db.commit(); db.refresh(obj)
+    return obj
+
+@app.put("/api/v1/datasources/{ds_id}", response_model=schemas.PrometheusDataSourceResponse)
+def update_datasource(ds_id: int, ds: schemas.PrometheusDataSourceCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("admin"))):
+    obj = db.query(models.PrometheusDataSource).filter(models.PrometheusDataSource.id == ds_id).first()
+    if not obj: raise HTTPException(404, "DataSource not found")
+    obj.name = ds.name; obj.url = ds.url.rstrip("/"); obj.headers = ds.headers
+    if ds.is_default:
+        for o in db.query(models.PrometheusDataSource).filter(models.PrometheusDataSource.is_default == True, models.PrometheusDataSource.id != ds_id).all():
+            o.is_default = False
+    obj.is_default = ds.is_default
+    db.commit(); db.refresh(obj)
+    return obj
+
+@app.delete("/api/v1/datasources/{ds_id}")
+def delete_datasource(ds_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("admin"))):
+    obj = db.query(models.PrometheusDataSource).filter(models.PrometheusDataSource.id == ds_id).first()
+    if not obj: raise HTTPException(404, "DataSource not found")
+    db.delete(obj); db.commit()
+    return {"status": "deleted"}
+
+@app.post("/api/v1/datasources/{ds_id}/test")
+def test_datasource(ds_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("admin"))):
+    import urllib.request as _ur
+    obj = db.query(models.PrometheusDataSource).filter(models.PrometheusDataSource.id == ds_id).first()
+    if not obj: raise HTTPException(404, "DataSource not found")
+    try:
+        req = _ur.Request(f"{obj.url}/api/v1/query", data=b"query=up", headers={"Content-Type": "application/x-www-form-urlencoded"})
+        resp = _ur.urlopen(req, timeout=5)
+        return {"status": "ok", "code": resp.status}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+# ─── Prometheus Query Proxy ──────────────────────────────────────────────
+@app.get("/api/v1/prometheus/query")
+def prometheus_instant_query(query: str, ds_id: Optional[int] = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    import urllib.request as _ur
+    ds = _get_datasource(db, ds_id)
+    try:
+        url = f"{ds.url}/api/v1/query?query={_ur.parse.quote(query)}"
+        req = _ur.Request(url)
+        _add_ds_headers(req, ds)
+        resp = _ur.urlopen(req, timeout=10)
+        return json.loads(resp.read())
+    except Exception as e:
+        raise HTTPException(502, f"Prometheus query failed: {e}")
+
+@app.get("/api/v1/prometheus/query_range")
+def prometheus_range_query(query: str, start: str, end: str, step: str = "60", ds_id: Optional[int] = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    import urllib.request as _ur
+    ds = _get_datasource(db, ds_id)
+    try:
+        url = f"{ds.url}/api/v1/query_range?query={_ur.parse.quote(query)}&start={_ur.parse.quote(start)}&end={_ur.parse.quote(end)}&step={step}"
+        req = _ur.Request(url)
+        _add_ds_headers(req, ds)
+        resp = _ur.urlopen(req, timeout=15)
+        return json.loads(resp.read())
+    except Exception as e:
+        raise HTTPException(502, f"Prometheus query_range failed: {e}")
+
+@app.get("/api/v1/prometheus/labels")
+def prometheus_labels(ds_id: Optional[int] = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    import urllib.request as _ur
+    ds = _get_datasource(db, ds_id)
+    try:
+        req = _ur.Request(f"{ds.url}/api/v1/labels")
+        _add_ds_headers(req, ds)
+        resp = _ur.urlopen(req, timeout=10)
+        return json.loads(resp.read())
+    except Exception as e:
+        raise HTTPException(502, f"Prometheus labels failed: {e}")
+
+@app.get("/api/v1/prometheus/label/{label}/values")
+def prometheus_label_values(label: str, ds_id: Optional[int] = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    import urllib.request as _ur
+    ds = _get_datasource(db, ds_id)
+    try:
+        req = _ur.Request(f"{ds.url}/api/v1/label/{_ur.parse.quote(label)}/values")
+        _add_ds_headers(req, ds)
+        resp = _ur.urlopen(req, timeout=10)
+        return json.loads(resp.read())
+    except Exception as e:
+        raise HTTPException(502, f"Prometheus label values failed: {e}")
+
+@app.get("/api/v1/prometheus/series")
+def prometheus_series(match: Optional[str] = None, start: Optional[str] = None, end: Optional[str] = None, ds_id: Optional[int] = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    import urllib.request as _ur
+    ds = _get_datasource(db, ds_id)
+    try:
+        params = []
+        if match: params.append(f"match[]={_ur.parse.quote(match)}")
+        if start: params.append(f"start={start}")
+        if end: params.append(f"end={end}")
+        url = f"{ds.url}/api/v1/series?" + "&".join(params) if params else f"{ds.url}/api/v1/series"
+        req = _ur.Request(url)
+        _add_ds_headers(req, ds)
+        resp = _ur.urlopen(req, timeout=10)
+        return json.loads(resp.read())
+    except Exception as e:
+        raise HTTPException(502, f"Prometheus series failed: {e}")
+
+def _get_datasource(db, ds_id=None):
+    if ds_id:
+        ds = db.query(models.PrometheusDataSource).filter(models.PrometheusDataSource.id == ds_id).first()
+        if ds: return ds
+    ds = db.query(models.PrometheusDataSource).filter(models.PrometheusDataSource.is_default == True).first()
+    if ds: return ds
+    ds = db.query(models.PrometheusDataSource).first()
+    if not ds: raise HTTPException(400, "No Prometheus datasource configured")
+    return ds
+
+def _add_ds_headers(req, ds):
+    if ds.headers:
+        try:
+            for k, v in json.loads(ds.headers).items():
+                req.add_header(k, v)
+        except: pass
+
+# ─── Monitor Dashboard Endpoints ─────────────────────────────────────────
+@app.get("/api/v1/monitor-dashboards", response_model=List[schemas.MonitorDashboardResponse])
+def list_dashboards(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    items = db.query(models.MonitorDashboard).all()
+    for item in items:
+        if isinstance(item.panels, str): item.panels = json.loads(item.panels)
+    return items
+
+@app.get("/api/v1/monitor-dashboards/{dash_id}", response_model=schemas.MonitorDashboardResponse)
+def get_dashboard(dash_id: int, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    obj = db.query(models.MonitorDashboard).filter(models.MonitorDashboard.id == dash_id).first()
+    if not obj: raise HTTPException(404, "Dashboard not found")
+    if isinstance(obj.panels, str): obj.panels = json.loads(obj.panels)
+    return obj
+
+@app.post("/api/v1/monitor-dashboards", response_model=schemas.MonitorDashboardResponse)
+def create_dashboard(dash: schemas.MonitorDashboardCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    obj = models.MonitorDashboard(
+        name=dash.name, description=dash.description, datasource_id=dash.datasource_id,
+        panels=json.dumps([p.model_dump() for p in dash.panels]),
+        refresh_interval=dash.refresh_interval, time_range=dash.time_range, created_by=_user.username
+    )
+    db.add(obj); db.commit(); db.refresh(obj)
+    obj.panels = json.loads(obj.panels) if isinstance(obj.panels, str) else obj.panels
+    return obj
+
+@app.put("/api/v1/monitor-dashboards/{dash_id}", response_model=schemas.MonitorDashboardResponse)
+def update_dashboard(dash_id: int, dash: schemas.MonitorDashboardCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    obj = db.query(models.MonitorDashboard).filter(models.MonitorDashboard.id == dash_id).first()
+    if not obj: raise HTTPException(404, "Dashboard not found")
+    obj.name = dash.name; obj.description = dash.description; obj.datasource_id = dash.datasource_id
+    obj.panels = json.dumps([p.model_dump() for p in dash.panels])
+    obj.refresh_interval = dash.refresh_interval; obj.time_range = dash.time_range
+    db.commit(); db.refresh(obj)
+    obj.panels = json.loads(obj.panels) if isinstance(obj.panels, str) else obj.panels
+    return obj
+
+@app.delete("/api/v1/monitor-dashboards/{dash_id}")
+def delete_dashboard(dash_id: int, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
+    obj = db.query(models.MonitorDashboard).filter(models.MonitorDashboard.id == dash_id).first()
+    if not obj: raise HTTPException(404, "Dashboard not found")
+    db.delete(obj); db.commit()
+    return {"status": "deleted"}
+
 
 if __name__ == "__main__":
     import uvicorn

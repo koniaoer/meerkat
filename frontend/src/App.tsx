@@ -9,6 +9,7 @@ import {
   TeamOutlined, RiseOutlined,
   ToolOutlined,
   BookOutlined, MessageOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons';
 import Dashboard from './pages/Dashboard';
 import ModelConfigPage from './pages/ModelConfig';
@@ -18,6 +19,7 @@ import AlertDetail from './pages/AlertDetail';
 import NotificationChannels from './pages/NotificationChannels';
 import RemediationActions from './pages/RemediationActions';
 import AlertRules from './pages/AlertRules';
+import MonitorDashboard from './pages/MonitorDashboard';
 import AuditLog from './pages/AuditLog';
 import OnCallSchedule from './pages/OnCallSchedule';
 import EscalationPolicyPage from './pages/EscalationPolicy';
@@ -122,6 +124,7 @@ const AppContent = () => {
     { key: '/remediation-templates', icon: <ToolOutlined />, label: <Link to="/remediation-templates">{t('remediationTemplates')}</Link> },
     { key: '/knowledge', icon: <BookOutlined />, label: <Link to="/knowledge">{t('knowledgeBase')}</Link> },
     { key: '/chatops', icon: <MessageOutlined />, label: <Link to="/chatops">{t('chatops')}</Link> },
+    { key: '/monitor', icon: <LineChartOutlined />, label: <Link to="/monitor">{t('monitorDashboard')}</Link> },
     { key: '/alert-rules', icon: <SafetyOutlined />, label: <Link to="/alert-rules">{t('alertRules')}</Link> },
     { key: '/oncall', icon: <TeamOutlined />, label: <Link to="/oncall">{t('oncallSchedule')}</Link> },
     { key: '/escalation', icon: <RiseOutlined />, label: <Link to="/escalation">{t('escalationPolicy')}</Link> },
@@ -298,6 +301,7 @@ const AppContent = () => {
               <Route path="/remediation-templates" element={<RemediationTemplates />} />
               <Route path="/knowledge" element={<KnowledgeBase />} />
               <Route path="/chatops" element={<ChatOps />} />
+              <Route path="/monitor" element={<MonitorDashboard />} />
               <Route path="/alert-rules" element={<AlertRules />} />
               <Route path="/oncall" element={<OnCallSchedule />} />
               <Route path="/escalation" element={<EscalationPolicyPage />} />

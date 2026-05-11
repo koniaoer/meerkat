@@ -403,3 +403,54 @@ class ChatResponse(BaseModel):
 
 class BatchDeleteRequest(BaseModel):
     ids: list[int] = []
+
+# Prometheus DataSource
+class PrometheusDataSourceCreate(BaseModel):
+    name: str
+    url: str
+    is_default: bool = False
+    headers: Optional[str] = None
+
+class PrometheusDataSourceResponse(BaseModel):
+    id: int
+    name: str
+    url: str
+    is_default: bool
+    headers: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+# Monitor Dashboard
+class PanelConfig(BaseModel):
+    id: str
+    title: str
+    query: str
+    unit: Optional[str] = None
+    type: str = "line"  # line / stat / gauge
+    grid: dict = {"x": 0, "y": 0, "w": 12, "h": 4}
+    legend: Optional[str] = None
+    thresholds: Optional[list] = None
+
+class MonitorDashboardCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    datasource_id: Optional[int] = None
+    panels: list[PanelConfig] = []
+    refresh_interval: int = 30
+    time_range: str = "1h"
+
+class MonitorDashboardResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    datasource_id: Optional[int] = None
+    panels: list[PanelConfig] = []
+    refresh_interval: int = 30
+    time_range: str = "1h"
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True

@@ -128,4 +128,25 @@ export const getChatHistory = (sessionId: string) => api.get(`/chat/${sessionId}
 export const getChatSessions = () => api.get('/chat-sessions');
 export const deleteChatSession = (sessionId: string) => api.delete(`/chat-sessions/${sessionId}`);
 
+// Prometheus DataSource
+export const getDatasources = () => api.get('/datasources');
+export const createDatasource = (data: any) => api.post('/datasources', data);
+export const updateDatasource = (id: number, data: any) => api.put(`/datasources/${id}`, data);
+export const deleteDatasource = (id: number) => api.delete(`/datasources/${id}`);
+export const testDatasource = (id: number) => api.post(`/datasources/${id}/test`);
+
+// Prometheus Query Proxy
+export const prometheusQuery = (query: string, dsId?: number) => api.get('/prometheus/query', { params: { query, ds_id: dsId } });
+export const prometheusQueryRange = (params: { query: string; start: string; end: string; step?: string; ds_id?: number }) => api.get('/prometheus/query_range', { params });
+export const prometheusLabels = (dsId?: number) => api.get('/prometheus/labels', { params: { ds_id: dsId } });
+export const prometheusLabelValues = (label: string, dsId?: number) => api.get(`/prometheus/label/${label}/values`, { params: { ds_id: dsId } });
+export const prometheusSeries = (params?: any) => api.get('/prometheus/series', { params });
+
+// Monitor Dashboard
+export const getMonitorDashboards = () => api.get('/monitor-dashboards');
+export const getMonitorDashboard = (id: number) => api.get(`/monitor-dashboards/${id}`);
+export const createMonitorDashboard = (data: any) => api.post('/monitor-dashboards', data);
+export const updateMonitorDashboard = (id: number, data: any) => api.put(`/monitor-dashboards/${id}`, data);
+export const deleteMonitorDashboard = (id: number) => api.delete(`/monitor-dashboards/${id}`);
+
 export default api;

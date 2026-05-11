@@ -216,3 +216,26 @@ class ChatMessage(Base):
     action_taken = Column(String, nullable=True)  # JSON: any action executed
     alert_id = Column(Integer, nullable=True)  # linked alert
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class PrometheusDataSource(Base):
+    __tablename__ = "prometheus_datasources"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True)
+    url = Column(String)  # e.g. http://prometheus:9090
+    is_default = Column(Boolean, default=False)
+    headers = Column(Text, nullable=True)  # JSON: extra headers
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+class MonitorDashboard(Base):
+    __tablename__ = "monitor_dashboards"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    description = Column(String, nullable=True)
+    datasource_id = Column(Integer, nullable=True)  # default datasource
+    panels = Column(Text, default="[]")  # JSON: [{id,title,query,unit,type,grid:{x,y,w,h},legend,thresholds}]
+    refresh_interval = Column(Integer, default=30)  # seconds
+    time_range = Column(String, default="1h")  # default time range
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
