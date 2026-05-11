@@ -337,6 +337,13 @@ export const translations: Translation = {
   'analysisTimeout': { zh: 'AI 分析超时', en: 'AI Analysis Timeout' },
   'noAIModel': { zh: '未配置 AI 模型', en: 'No AI Model Config' },
   'records': { zh: '条', en: 'records' },
+  'noResults': { zh: '无匹配结果', en: 'No results' },
+  'noArticles': { zh: '暂无文章，点击新增创建第一篇', en: 'No articles yet, click Add to create one' },
+  'title': { zh: '标题', en: 'Title' },
+  'content': { zh: '内容', en: 'Content' },
+  'tags': { zh: '标签', en: 'Tags' },
+  'optional': { zh: '可选', en: 'Optional' },
+  'markdownSupported': { zh: '支持 Markdown 格式', en: 'Markdown supported' },
   'refresh': { zh: '刷新', en: 'Refresh' },
   'total': { zh: '共', en: 'Total' },
 };
