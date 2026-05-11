@@ -293,8 +293,8 @@ def read_configs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db),
     configs = crud.get_model_configs(db, skip=skip, limit=limit)
     for c in configs:
         if c.api_key:
-            decrypted = decrypt_value(c.api_key)
-            c.api_key = decrypted[:4] + "*" * (len(decrypted) - 4) if len(decrypted) > 8 else "****"
+            try: c.api_key = decrypt_value(c.api_key)
+            except: pass
     return configs
 
 
@@ -304,29 +304,29 @@ def read_active_config(db: Session = Depends(get_db), _user: models.User = Depen
     if not config:
         raise HTTPException(status_code=404, detail="No active config found")
     if config.api_key:
-        decrypted = decrypt_value(config.api_key)
-        config.api_key = decrypted[:4] + "*" * (len(decrypted) - 4) if len(decrypted) > 8 else "****"
+        try: config.api_key = decrypt_value(config.api_key)
+        except: pass
     return config
 
 @app.put("/api/v1/model-configs/{config_id}", response_model=schemas.ModelConfig)
 def update_config(config_id: int, config: schemas.ModelConfigCreate, db: Session = Depends(get_db), _user: models.User = Depends(require_role("operator"))):
     config_data = config.model_dump()
-    # If api_key looks like a masked value, keep the existing encrypted one
-    if config_data["api_key"] and "*" in config_data["api_key"]:
+    # If api_key is masked (contains ***), keep the existing encrypted value
+    if config_data["api_key"] and "****" in config_data["api_key"]:
         existing = crud.get_model_config(db, config_id)
         if existing and existing.api_key:
-            config_data["api_key"] = existing.api_key  # keep encrypted value
+            config_data["api_key"] = existing.api_key
         else:
             raise HTTPException(status_code=400, detail="Cannot update: no existing API key found")
-    else:
+    elif config_data["api_key"]:
         config_data["api_key"] = encrypt_value(config_data["api_key"])
     db_config = crud.update_model_config(db, config_id, schemas.ModelConfigCreate(**config_data))
     if not db_config:
         raise HTTPException(status_code=404, detail="Config not found")
-    # Return with masked api_key
+    # Return decrypted api_key
     if db_config.api_key:
-        decrypted = decrypt_value(db_config.api_key)
-        db_config.api_key = decrypted[:4] + "*" * (len(decrypted) - 4) if len(decrypted) > 8 else "****"
+        try: db_config.api_key = decrypt_value(db_config.api_key)
+        except: pass
     return db_config
 
 
@@ -363,9 +363,7 @@ def list_notification_channels(db: Session = Depends(get_db), _user: models.User
                 sensitive_keys = ["api_key", "secret", "password", "smtp_password", "token", "webhook_secret"]
                 for key in sensitive_keys:
                     if key in config_dict and config_dict[key]:
-                        try:
-                            decrypted = decrypt_value(str(config_dict[key]))
-                            config_dict[key] = decrypted[:4] + "*" * (len(decrypted) - 4) if len(decrypted) > 8 else "****"
+                        try: config_dict[key] = decrypt_value(str(config_dict[key]))
                         except: pass
                 ch.config = json.dumps(config_dict, ensure_ascii=False)
             except: pass
@@ -407,15 +405,13 @@ def update_notification_channel(channel_id: int, channel: schemas.NotificationCh
     result = crud.update_notification_channel(db, channel_id, channel)
     if not result:
         raise HTTPException(status_code=404, detail="Channel not found")
-    # Return with masked sensitive values
+    # Return with decrypted sensitive values
     if result.config:
         try:
             rd = json.loads(result.config) if isinstance(result.config, str) else result.config
             for key in sensitive_keys:
                 if key in rd and rd[key]:
-                    try:
-                        decrypted = decrypt_value(str(rd[key]))
-                        rd[key] = decrypted[:4] + "*" * (len(decrypted) - 4) if len(decrypted) > 8 else "****"
+                    try: rd[key] = decrypt_value(str(rd[key]))
                     except: pass
             result.config = json.dumps(rd, ensure_ascii=False)
         except: pass
