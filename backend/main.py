@@ -1306,10 +1306,10 @@ def test_datasource(ds_id: int, db: Session = Depends(get_db), _user: models.Use
 # ─── Prometheus Query Proxy ──────────────────────────────────────────────
 @app.get("/api/v1/prometheus/query")
 def prometheus_instant_query(query: str, ds_id: Optional[int] = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
-    import urllib.request as _ur
+    import urllib.request as _ur, urllib.parse as _up
     ds = _get_datasource(db, ds_id)
     try:
-        url = f"{ds.url}/api/v1/query?query={_ur.parse.quote(query)}"
+        url = f"{ds.url}/api/v1/query?query={_up.quote(query)}"
         req = _ur.Request(url)
         _add_ds_headers(req, ds)
         resp = _ur.urlopen(req, timeout=10)
@@ -1319,10 +1319,10 @@ def prometheus_instant_query(query: str, ds_id: Optional[int] = None, db: Sessio
 
 @app.get("/api/v1/prometheus/query_range")
 def prometheus_range_query(query: str, start: str, end: str, step: str = "60", ds_id: Optional[int] = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
-    import urllib.request as _ur
+    import urllib.request as _ur, urllib.parse as _up
     ds = _get_datasource(db, ds_id)
     try:
-        url = f"{ds.url}/api/v1/query_range?query={_ur.parse.quote(query)}&start={_ur.parse.quote(start)}&end={_ur.parse.quote(end)}&step={step}"
+        url = f"{ds.url}/api/v1/query_range?query={_up.quote(query)}&start={_up.quote(start)}&end={_up.quote(end)}&step={step}"
         req = _ur.Request(url)
         _add_ds_headers(req, ds)
         resp = _ur.urlopen(req, timeout=15)
@@ -1344,10 +1344,10 @@ def prometheus_labels(ds_id: Optional[int] = None, db: Session = Depends(get_db)
 
 @app.get("/api/v1/prometheus/label/{label}/values")
 def prometheus_label_values(label: str, ds_id: Optional[int] = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
-    import urllib.request as _ur
+    import urllib.request as _ur, urllib.parse as _up
     ds = _get_datasource(db, ds_id)
     try:
-        req = _ur.Request(f"{ds.url}/api/v1/label/{_ur.parse.quote(label)}/values")
+        req = _ur.Request(f"{ds.url}/api/v1/label/{_up.quote(label)}/values")
         _add_ds_headers(req, ds)
         resp = _ur.urlopen(req, timeout=10)
         return json.loads(resp.read())
@@ -1356,11 +1356,11 @@ def prometheus_label_values(label: str, ds_id: Optional[int] = None, db: Session
 
 @app.get("/api/v1/prometheus/series")
 def prometheus_series(match: Optional[str] = None, start: Optional[str] = None, end: Optional[str] = None, ds_id: Optional[int] = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
-    import urllib.request as _ur
+    import urllib.request as _ur, urllib.parse as _up
     ds = _get_datasource(db, ds_id)
     try:
         params = []
-        if match: params.append(f"match[]={_ur.parse.quote(match)}")
+        if match: params.append(f"match[]={_up.quote(match)}")
         if start: params.append(f"start={start}")
         if end: params.append(f"end={end}")
         url = f"{ds.url}/api/v1/series?" + "&".join(params) if params else f"{ds.url}/api/v1/series"
