@@ -101,7 +101,7 @@ const Dashboard: React.FC = () => {
     try {
       const res = await reanalyzeAlert(id);
       if (res.data.analysis_error) {
-        message.error(`AI 分析失败: ${res.data.analysis_error}`);
+        message.error(`${t('analysisFailed')}: ${res.data.analysis_error}`);
       } else {
         message.success('AI 分析完成');
       }
@@ -112,14 +112,14 @@ const Dashboard: React.FC = () => {
     } finally { setReanalyzing(null); }
   };
   const handleDeleteAlert = async (id: number) => {
-    try { await deleteAlert(id); message.success('已删除'); fetchStats(); fetchAlerts(); setSelectedRowKeys(prev => prev.filter(k => k !== id)); }
+    try { await deleteAlert(id); message.success(t('deleted')); fetchStats(); fetchAlerts(); setSelectedRowKeys(prev => prev.filter(k => k !== id)); }
     catch { message.error(t('failed')); }
   };
   const handleBatchDelete = async () => {
     if (selectedRowKeys.length === 0) return;
     try {
       await batchDeleteAlerts(selectedRowKeys);
-      message.success(`已删除 ${selectedRowKeys.length} 条告警`);
+      message.success(`${t('deleted')} ${selectedRowKeys.length} ${t('records')}`);
       setSelectedRowKeys([]);
       fetchStats(); fetchAlerts();
     } catch { message.error(t('failed')); }
@@ -146,12 +146,12 @@ const Dashboard: React.FC = () => {
           <Space size={4}>
             <Tooltip title={
               <div style={{ maxHeight: 200, overflow: 'auto' }}>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>❌ 分析失败详情</div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>❌ {t('analysisFailed')}</div>
                 <div style={{ fontFamily: 'monospace', fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{r.analysis_error}</div>
               </div>
             }>
               <Tag color="error" style={{ cursor: 'pointer', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                <WarningOutlined /> {v || 'AI 分析失败'}
+                <WarningOutlined /> {v || t('analysisFailed')}
               </Tag>
             </Tooltip>
             <Button size="small" type="link" icon={<RedoOutlined spin={reanalyzing === r.id} />} loading={reanalyzing === r.id} onClick={(e) => { e.stopPropagation(); handleReanalyze(r.id); }}>
@@ -165,7 +165,7 @@ const Dashboard: React.FC = () => {
     { title: t('actions'), key: 'ac', width: 180, render: (_: any, r: any) => <Space size="small">
       {!r.acknowledged && <Button size="small" onClick={e => { e.stopPropagation(); handleAcknowledge(r.id); }}>{t('acknowledge')}</Button>}
       <Dropdown menu={{ items: silenceItems(r.id) }}><Button size="small" onClick={e => e.stopPropagation()}>{t('silence')}</Button></Dropdown>
-      <Popconfirm title="确定删除此告警？" onConfirm={(e?: any) => { e?.stopPropagation?.(); handleDeleteAlert(r.id); }}>
+      <Popconfirm title={t('confirmDeleteAlert')} onConfirm={(e?: any) => { e?.stopPropagation?.(); handleDeleteAlert(r.id); }}>
         <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={e => e.stopPropagation()} />
       </Popconfirm>
     </Space> },
@@ -232,8 +232,8 @@ const Dashboard: React.FC = () => {
         <Col><Select allowClear placeholder={t('acknowledgedFilter')} style={{ width: 130 }} onChange={v => setFilters({ ...filters, acknowledged: v })} options={[{ value: 'yes', label: t('yes') }, { value: 'no', label: t('no') }]} /></Col>
         {selectedRowKeys.length > 0 && (
           <Col>
-            <Popconfirm title={`确定删除选中的 ${selectedRowKeys.length} 条告警？`} onConfirm={handleBatchDelete}>
-              <Button danger icon={<DeleteOutlined />}>批量删除 ({selectedRowKeys.length})</Button>
+            <Popconfirm title={`${t('confirmBatchDelete')} ${selectedRowKeys.length} ${t('records')}？`} onConfirm={handleBatchDelete}>
+              <Button danger icon={<DeleteOutlined />}>{t('batchDelete')} ({selectedRowKeys.length})</Button>
             </Popconfirm>
           </Col>
         )}
@@ -245,7 +245,7 @@ const Dashboard: React.FC = () => {
           current: pagination.current,
           pageSize: pagination.pageSize,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showTotal: (total) => `${t('total')} ${total} ${t('records')}`,
           onChange: (page, size) => setPagination({ current: page, pageSize: size }),
           onShowSizeChange: (current, size) => setPagination({ current: 1, pageSize: size }),
         }}

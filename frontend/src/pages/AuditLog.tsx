@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Table, Select, Tag, Space, Input, Card, Row, Col, Statistic, Button, Tooltip, Popconfirm, message } from 'antd';
+import { Table, Select, Tag, Space, Input, Card, Row, Col, Statistic, Button, Popconfirm, message } from 'antd';
 import { DeleteOutlined, SearchOutlined, ReloadOutlined, SafetyCertificateOutlined, PlusCircleOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import { useLanguage } from '../services/i18n';
 import { getAuditLogs, deleteAuditLog, batchDeleteAuditLogs } from '../services/api';
@@ -14,7 +14,6 @@ const AuditLog: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
   const [pageState, setPageState] = useState({ current: 1, pageSize: 20 });
 
-  // Filtered logs derived from allLogs + filters + search
   const logs = React.useMemo(() => {
     let filtered = allLogs;
     if (actionFilter) filtered = filtered.filter((l: any) => l.action === actionFilter);
@@ -42,7 +41,7 @@ const AuditLog: React.FC = () => {
   useEffect(() => { loadLogs(); }, []);
 
   const handleDelete = async (id: number) => {
-    try { await deleteAuditLog(id); message.success('已删除'); loadLogs(); setSelectedRowKeys(prev => prev.filter(k => k !== id)); }
+    try { await deleteAuditLog(id); message.success(t('deleted')); loadLogs(); setSelectedRowKeys(prev => prev.filter(k => k !== id)); }
     catch { message.error(t('failed')); }
   };
 
@@ -50,7 +49,7 @@ const AuditLog: React.FC = () => {
     if (selectedRowKeys.length === 0) return;
     try {
       await batchDeleteAuditLogs(selectedRowKeys);
-      message.success(`已删除 ${selectedRowKeys.length} 条日志`);
+      message.success(`${t('deleted')} ${selectedRowKeys.length} ${t('records')}`);
       setSelectedRowKeys([]);
       loadLogs();
     } catch { message.error(t('failed')); }
@@ -67,23 +66,31 @@ const AuditLog: React.FC = () => {
     return 'default';
   };
 
+  const actionLabelMap: Record<string, string> = {
+    'alert.acknowledge': 'audit.acknowledge', 'alert.silence': 'audit.silence', 'alert.suppressed': 'audit.suppressed',
+    'alert.delete': 'audit.alertDelete', 'alert.batch_delete': 'audit.alertBatchDelete',
+    'routing_rule.create': 'audit.routingCreate', 'routing_rule.update': 'audit.routingUpdate', 'routing_rule.delete': 'audit.routingDelete',
+    'suppression_rule.create': 'audit.suppressionCreate', 'suppression_rule.update': 'audit.suppressionUpdate', 'suppression_rule.delete': 'audit.suppressionDelete',
+    'template.create': 'audit.templateCreate', 'template.update': 'audit.templateUpdate', 'template.delete': 'audit.templateDelete', 'template.apply': 'audit.templateApply',
+    'remediation_action.delete': 'audit.actionDelete', 'remediation_action.batch_delete': 'audit.actionBatchDelete',
+    'escalation.triggered': 'audit.escalationTriggered', 'escalation.escalated': 'audit.escalationTriggered',
+    'notification_channel.create': 'audit.channelCreate', 'notification_channel.update': 'audit.channelUpdate', 'notification_channel.delete': 'audit.channelDelete',
+  };
+
   const actionLabel = (action: string) => {
-    const map: Record<string, string> = {
-      'alert.acknowledge': '✓ 确认', 'alert.silence': '🔇 静默', 'alert.suppressed': '🚫 抑制',
-      'alert.delete': '🗑️ 删除告警', 'alert.batch_delete': '🗑️ 批量删除告警',
-      'routing_rule.create': '➕ 路由创建', 'routing_rule.update': '✏️ 路由更新', 'routing_rule.delete': '🗑️ 路由删除',
-      'suppression_rule.create': '➕ 抑制创建', 'suppression_rule.update': '✏️ 抑制更新', 'suppression_rule.delete': '🗑️ 抑制删除',
-      'template.create': '➕ 模板创建', 'template.update': '✏️ 模板更新', 'template.delete': '🗑️ 模板删除', 'template.apply': '▶️ 模板应用',
-      'remediation_action.delete': '🗑️ 动作删除', 'remediation_action.batch_delete': '🗑️ 批量删除动作',
-      'escalation.triggered': '⬆️ 升级触发', 'escalation.escalated': '⬆️ 升级执行',
-      'notification_channel.create': '➕ 通道创建', 'notification_channel.update': '✏️ 通道更新', 'notification_channel.delete': '🗑️ 通道删除',
-    };
-    return map[action] || action;
+    const key = actionLabelMap[action];
+    return key ? t(key) : action;
   };
 
   const resourceTypeIcon: Record<string, string> = {
     alert: '🔔', routing_rule: '🔀', suppression_rule: '🚫', remediation_template: '🔧',
     remediation_action: '⚡', escalation: '⬆️', notification_channel: '📡',
+  };
+
+  const resTypeLabelMap: Record<string, string> = {
+    alert: 'res.alert', routing_rule: 'res.routingRule', suppression_rule: 'res.suppressionRule',
+    remediation_template: 'res.remediationTemplate', remediation_action: 'res.remediationAction',
+    escalation: 'res.escalation', notification_channel: 'res.notificationChannel',
   };
 
   const columns = [
@@ -103,7 +110,11 @@ const AuditLog: React.FC = () => {
     },
     {
       title: t('resourceType'), dataIndex: 'resource_type', key: 'rt', width: 140,
-      render: (v: string) => <Tag color="processing">{resourceTypeIcon[v] || '📄'} {v}</Tag>,
+      render: (v: string) => {
+        const icon = resourceTypeIcon[v] || '📄';
+        const label = resTypeLabelMap[v] ? t(resTypeLabelMap[v]) : v;
+        return <Tag color="processing">{icon} {label}</Tag>;
+      },
     },
     {
       title: 'ID', dataIndex: 'resource_id', key: 'ri', width: 60,
@@ -121,7 +132,7 @@ const AuditLog: React.FC = () => {
     {
       title: '', key: 'op', width: 40,
       render: (_: any, r: any) => (
-        <Popconfirm title="确定删除此日志？" onConfirm={() => handleDelete(r.id)}>
+        <Popconfirm title={t('confirmDeleteLog')} onConfirm={() => handleDelete(r.id)}>
           <Button size="small" type="text" danger icon={<DeleteOutlined />} />
         </Popconfirm>
       ),
@@ -129,35 +140,34 @@ const AuditLog: React.FC = () => {
   ];
 
   const actionTypes = [
-    { label: '✓ 确认告警', value: 'alert.acknowledge' },
-    { label: '🔇 静默告警', value: 'alert.silence' },
-    { label: '🚫 抑制告警', value: 'alert.suppressed' },
-    { label: '🗑️ 删除告警', value: 'alert.delete' },
-    { label: '🗑️ 批量删除告警', value: 'alert.batch_delete' },
-    { label: '➕ 路由创建', value: 'routing_rule.create' },
-    { label: '✏️ 路由更新', value: 'routing_rule.update' },
-    { label: '🗑️ 路由删除', value: 'routing_rule.delete' },
-    { label: '➕ 抑制创建', value: 'suppression_rule.create' },
-    { label: '✏️ 抑制更新', value: 'suppression_rule.update' },
-    { label: '🗑️ 抑制删除', value: 'suppression_rule.delete' },
-    { label: '➕ 模板创建', value: 'template.create' },
-    { label: '✏️ 模板更新', value: 'template.update' },
-    { label: '🗑️ 模板删除', value: 'template.delete' },
-    { label: '▶️ 模板应用', value: 'template.apply' },
-    { label: '⬆️ 升级触发', value: 'escalation.triggered' },
+    { label: t('audit.acknowledge'), value: 'alert.acknowledge' },
+    { label: t('audit.silence'), value: 'alert.silence' },
+    { label: t('audit.suppressed'), value: 'alert.suppressed' },
+    { label: t('audit.alertDelete'), value: 'alert.delete' },
+    { label: t('audit.alertBatchDelete'), value: 'alert.batch_delete' },
+    { label: t('audit.routingCreate'), value: 'routing_rule.create' },
+    { label: t('audit.routingUpdate'), value: 'routing_rule.update' },
+    { label: t('audit.routingDelete'), value: 'routing_rule.delete' },
+    { label: t('audit.suppressionCreate'), value: 'suppression_rule.create' },
+    { label: t('audit.suppressionUpdate'), value: 'suppression_rule.update' },
+    { label: t('audit.suppressionDelete'), value: 'suppression_rule.delete' },
+    { label: t('audit.templateCreate'), value: 'template.create' },
+    { label: t('audit.templateUpdate'), value: 'template.update' },
+    { label: t('audit.templateDelete'), value: 'template.delete' },
+    { label: t('audit.templateApply'), value: 'template.apply' },
+    { label: t('audit.escalationTriggered'), value: 'escalation.triggered' },
   ];
 
   const resourceTypes = [
-    { label: '🔔 Alert', value: 'alert' },
-    { label: '🔀 Routing Rule', value: 'routing_rule' },
-    { label: '🚫 Suppression Rule', value: 'suppression_rule' },
-    { label: '🔧 Remediation Template', value: 'remediation_template' },
-    { label: '⚡ Remediation Action', value: 'remediation_action' },
-    { label: '⬆️ Escalation', value: 'escalation' },
-    { label: '📡 Notification Channel', value: 'notification_channel' },
+    { label: t('res.alert'), value: 'alert' },
+    { label: t('res.routingRule'), value: 'routing_rule' },
+    { label: t('res.suppressionRule'), value: 'suppression_rule' },
+    { label: t('res.remediationTemplate'), value: 'remediation_template' },
+    { label: t('res.remediationAction'), value: 'remediation_action' },
+    { label: t('res.escalation'), value: 'escalation' },
+    { label: t('res.notificationChannel'), value: 'notification_channel' },
   ];
 
-  // Stats derived from allLogs
   const statsByAction = allLogs.reduce((acc: any, l: any) => { acc[l.action] = (acc[l.action] || 0) + 1; return acc; }, {});
   const ackCount = Object.entries(statsByAction).filter(([k]) => k.includes('acknowledge')).reduce((a: number, [, v]: any) => a + v, 0);
   const createCount = Object.entries(statsByAction).filter(([k]) => k.includes('create')).reduce((a: number, [, v]: any) => a + v, 0);
@@ -165,7 +175,6 @@ const AuditLog: React.FC = () => {
 
   return (
     <div>
-      {/* Quick stats */}
       <Row gutter={[12, 12]} style={{ marginBottom: 12 }}>
         <Col span={6}>
           <Card bordered={false} size="small" style={{ background: 'var(--ant-color-bg-elevated)' }}>
@@ -174,25 +183,24 @@ const AuditLog: React.FC = () => {
         </Col>
         <Col span={6}>
           <Card bordered={false} size="small" style={{ background: 'var(--ant-color-bg-elevated)' }}>
-            <Statistic title={t('completed')} value={ackCount} valueStyle={{ color: '#52c41a' }} prefix={<SafetyCertificateOutlined />} />
+            <Statistic title={t('acknowledgeCount')} value={ackCount} valueStyle={{ color: '#52c41a' }} prefix={<SafetyCertificateOutlined />} />
           </Card>
         </Col>
         <Col span={6}>
           <Card bordered={false} size="small" style={{ background: 'var(--ant-color-bg-elevated)' }}>
-            <Statistic title="Create" value={createCount} valueStyle={{ color: '#1890ff' }} prefix={<PlusCircleOutlined />} />
+            <Statistic title={t('createCount')} value={createCount} valueStyle={{ color: '#1890ff' }} prefix={<PlusCircleOutlined />} />
           </Card>
         </Col>
         <Col span={6}>
           <Card bordered={false} size="small" style={{ background: 'var(--ant-color-bg-elevated)' }}>
-            <Statistic title="Delete" value={deleteCount} valueStyle={{ color: '#ff4d4f' }} prefix={<MinusCircleOutlined />} />
+            <Statistic title={t('deleteCount')} value={deleteCount} valueStyle={{ color: '#ff4d4f' }} prefix={<MinusCircleOutlined />} />
           </Card>
         </Col>
       </Row>
 
-      {/* Filters */}
       <Row gutter={[12, 12]} style={{ marginBottom: 12 }} align="middle">
         <Col>
-          <Input prefix={<SearchOutlined />} placeholder="搜索用户/操作/详情" allowClear style={{ width: 200 }}
+          <Input prefix={<SearchOutlined />} placeholder={t('searchUserActionDetail')} allowClear style={{ width: 200 }}
             value={searchText} onChange={e => { setSearchText(e.target.value); setPageState(p => ({ ...p, current: 1 })); }} />
         </Col>
         <Col>
@@ -209,8 +217,8 @@ const AuditLog: React.FC = () => {
         <Col flex="auto" />
         {selectedRowKeys.length > 0 && (
           <Col>
-            <Popconfirm title={`确定删除选中的 ${selectedRowKeys.length} 条日志？`} onConfirm={handleBatchDelete}>
-              <Button danger icon={<DeleteOutlined />}>批量删除 ({selectedRowKeys.length})</Button>
+            <Popconfirm title={`${t('confirmBatchDelete')} ${selectedRowKeys.length} ${t('records')}？`} onConfirm={handleBatchDelete}>
+              <Button danger icon={<DeleteOutlined />}>{t('batchDelete')} ({selectedRowKeys.length})</Button>
             </Popconfirm>
           </Col>
         )}
@@ -230,7 +238,7 @@ const AuditLog: React.FC = () => {
           current: pageState.current,
           pageSize: pageState.pageSize,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showTotal: (total) => `${t('total')} ${total} ${t('records')}`,
           onChange: (page, size) => setPageState({ current: page, pageSize: size }),
           onShowSizeChange: (current, size) => setPageState({ current: 1, pageSize: size }),
         }}

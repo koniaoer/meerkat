@@ -100,7 +100,7 @@ const RemediationActions: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
-    try { await deleteRemediationAction(id); message.success('已删除'); fetchActions(); setSelectedRowKeys(prev => prev.filter(k => k !== id)); }
+    try { await deleteRemediationAction(id); message.success(t('deleted')); fetchActions(); setSelectedRowKeys(prev => prev.filter(k => k !== id)); }
     catch { message.error(t('failed')); }
   };
 
@@ -108,7 +108,7 @@ const RemediationActions: React.FC = () => {
     if (selectedRowKeys.length === 0) return;
     try {
       await batchDeleteRemediationActions(selectedRowKeys);
-      message.success(`已删除 ${selectedRowKeys.length} 条记录`);
+      message.success(`${t('deleted')} ${selectedRowKeys.length} ${t('records')}`);
       setSelectedRowKeys([]);
       fetchActions();
     } catch { message.error(t('failed')); }
@@ -171,7 +171,7 @@ const RemediationActions: React.FC = () => {
               <Button size="small" icon={<ReloadOutlined />}>{t('reExecute')}</Button>
             </Popconfirm>
           )}
-          <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
+          <Popconfirm title={t('confirmDeleteAction')} onConfirm={() => handleDelete(record.id)}>
             <Button size="small" type="text" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
@@ -210,7 +210,7 @@ const RemediationActions: React.FC = () => {
         <Col>
           <Input
             prefix={<SearchOutlined />}
-            placeholder="搜索名称/描述"
+            placeholder={t('searchNameDesc')}
             allowClear
             style={{ width: 200 }}
             value={searchText}
@@ -220,25 +220,25 @@ const RemediationActions: React.FC = () => {
         <Col>
           <Select allowClear placeholder={t('statusFilter')} style={{ width: 130 }} onChange={(val) => { setFilters({ ...filters, status: val }); setPagination(p => ({ ...p, current: 1 })); }} value={filters.status}
             options={[
-              { value: 'pending', label: '⏳ Pending' }, { value: 'approved', label: '✅ Approved' },
-              { value: 'executing', label: '⚡ Executing' }, { value: 'completed', label: '✅ Completed' },
-              { value: 'failed', label: '❌ Failed' }, { value: 'rejected', label: '🚫 Rejected' },
-              { value: 'timeout', label: '⏰ Timeout' },
+              { value: 'pending', label: `⏳ ${t('pending')}` }, { value: 'approved', label: `✅ ${t('approved')}` },
+              { value: 'executing', label: `⚡ ${t('executing')}` }, { value: 'completed', label: `✅ ${t('completed')}` },
+              { value: 'failed', label: `❌ ${t('failed')}` }, { value: 'rejected', label: `🚫 ${t('rejected')}` },
+              { value: 'timeout', label: `⏰ ${t('timeout')}` },
             ]}
           />
         </Col>
         <Col>
           <Select allowClear placeholder={t('riskLevelFilter')} style={{ width: 130 }} onChange={(val) => { setFilters({ ...filters, risk_level: val }); setPagination(p => ({ ...p, current: 1 })); }} value={filters.risk_level}
             options={[
-              { value: 'low', label: '🟢 Low' }, { value: 'medium', label: '🟡 Medium' }, { value: 'high', label: '🔴 High' },
+              { value: 'low', label: `🟢 ${t('low')}` }, { value: 'medium', label: `🟡 ${t('medium')}` }, { value: 'high', label: `🔴 ${t('high')}` },
             ]}
           />
         </Col>
         <Col flex="auto" />
         {selectedRowKeys.length > 0 && (
           <Col>
-            <Popconfirm title={`确定删除选中的 ${selectedRowKeys.length} 条记录？`} onConfirm={handleBatchDelete}>
-              <Button danger icon={<DeleteOutlined />}>批量删除 ({selectedRowKeys.length})</Button>
+            <Popconfirm title={`${t('confirmBatchDelete')} ${selectedRowKeys.length} ${t('records')}？`} onConfirm={handleBatchDelete}>
+              <Button danger icon={<DeleteOutlined />}>{t('batchDelete')} ({selectedRowKeys.length})</Button>
             </Popconfirm>
           </Col>
         )}
@@ -259,7 +259,7 @@ const RemediationActions: React.FC = () => {
           current: pagination.current,
           pageSize: pagination.pageSize,
           showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
+          showTotal: (total) => `${t('total')} ${total} ${t('records')}`,
           onChange: (page, size) => setPagination({ current: page, pageSize: size }),
           onShowSizeChange: (current, size) => setPagination({ current: 1, pageSize: size }),
         }}
@@ -287,7 +287,7 @@ const RemediationActions: React.FC = () => {
                 <Tag color={statusConfig[detailModal.status]?.color}>{statusConfig[detailModal.status]?.emoji} {detailModal.status?.toUpperCase()}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label={t('description')} span={2}>{detailModal.description || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('autoApproved')}>{detailModal.auto_approved ? '✅ 自动' : '⏳ 手动'}</Descriptions.Item>
+              <Descriptions.Item label={t('autoApproved')}>{detailModal.auto_approved ? '✅ Auto' : '⏳ Manual'}</Descriptions.Item>
               <Descriptions.Item label={t('approvedBy')}>{detailModal.approved_by || '-'}</Descriptions.Item>
               <Descriptions.Item label={t('config')} span={2}>
                 <pre style={{
@@ -323,8 +323,8 @@ const RemediationActions: React.FC = () => {
                 {['completed', 'failed', 'timeout'].includes(detailModal.status) && (
                   <Button icon={<ReloadOutlined />} onClick={() => { handleExecute(detailModal.id); setDetailModal(null); }}>{t('reExecute')}</Button>
                 )}
-                <Popconfirm title="确定删除？" onConfirm={() => { handleDelete(detailModal.id); setDetailModal(null); }}>
-                  <Button danger icon={<DeleteOutlined />}>删除</Button>
+                <Popconfirm title={t('confirmDeleteAction')} onConfirm={() => { handleDelete(detailModal.id); setDetailModal(null); }}>
+                  <Button danger icon={<DeleteOutlined />}>{t('delete')}</Button>
                 </Popconfirm>
               </Space>
             </div>
