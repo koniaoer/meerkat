@@ -190,6 +190,30 @@ const MonitorDashboardPage: React.FC = () => {
   };
 
   // Grafana Dashboard Import
+  const cleanPromQL = (q: string): string => {
+    // 1. Remove [[var]] variables
+    q = q.replace(/\[\[[\w.]+\]\]/g, '');
+    // 2. Remove ${var} and $var variables (but NOT $ inside PromQL like label values)
+    q = q.replace(/\$\{[\w.]+\}/g, '').replace(/\$[\w.]+/g, '');
+    // 3. Clean up empty label matchers: ,origin_prometheus=~"" or {origin_prometheus=~""}
+    //    Match: key=~""  or  key=""  with empty value after variable removal
+    q = q.replace(/,?\s*\w+\s*=~?\s*["'][^"']*["']/g, (m) => {
+      const val = m.match(/=~?\s*["']([^"']*)["']/);
+      if (val && val[1].trim()) return m; // keep non-empty matchers
+      if (m.startsWith(',')) return '';
+      return ''; // remove empty matcher
+    });
+    // 4. Fix empty curly braces {}, {,}
+    q = q.replace(/\{\s*,?\s*\}/g, '');
+    q = q.replace(/\{\s+/g, '{');
+    // 5. Clean up extra spaces, commas, OR at start
+    q = q.replace(/\s+/g, ' ').replace(/,\s*,/g, ',').replace(/\{\s*,/g, '{').replace(/,\s*\}/g, '}');
+    q = q.trim();
+    // 6. Remove leading "OR " or trailing " OR"
+    q = q.replace(/^OR\s+/i, '').replace(/\s+OR$/i, '');
+    return q;
+  };
+
   const parseGrafanaDashboard = (jsonStr: string) => {
     try {
       const gf = JSON.parse(jsonStr);
@@ -202,45 +226,25 @@ const MonitorDashboardPage: React.FC = () => {
       const meerkatPanels: any[] = [];
       let yOff = 0;
 
+      // Flatten nested panels (Grafana rows contain sub-panels)
+      const flatPanels: any[] = [];
       for (const p of panels) {
-        // Skip row panels (they're just visual separators)
-        if (p.type === 'row') continue;
-
-        // Resolve datasource
-        let panelDsId = dsId;
-        const ds = p.datasource ?? p.datasourceUid ?? p.targets?.[0]?.datasource;
-        if (ds && typeof ds === 'object' && ds.uid) {
-          const found = datasources.find((d: any) => d.name.toLowerCase().includes(ds.uid.toLowerCase()));
-          if (found) panelDsId = found.id;
+        if (p.type === 'row' && p.panels?.length) {
+          flatPanels.push(...p.panels);
+        } else if (p.type !== 'row') {
+          flatPanels.push(p);
         }
+      }
 
-        // Build PromQL from targets
-        const queries = (p.targets || [])
-          .filter((t: any) => t.expr || t.query)
-          .map((t: any) => {
-            let q = t.expr || t.query || '';
-            // Strip Grafana template variables: $var, ${var}, [[var]]
-            q = q.replace(/\$\{?[\w.]+\}?/g, '').replace(/\[\[[\w.]+\]\]/g, '').replace(/\s+/g, ' ').trim();
-            // Fix empty label matchers like {job=~""} -> remove that matcher
-            q = q.replace(/,\s*\w+(?:=~?)["'][^"']*["']/g, (m) => {
-              const val = m.match(/=~?["']([^"']*)["']/);
-              return (val && val[1]) ? m : '';
-            });
-            return q;
-          })
-          .filter(q => q.length > 0);
-        const query = queries[0] || '';
-
-        if (!query) continue;
-
+      for (const p of flatPanels) {
         // Map Grafana panel type
         let chartType = 'line';
-        if (p.type === 'stat' || p.type === 'singlestat') chartType = 'stat';
+        if (p.type === 'stat' || p.type === 'singlestat' || p.type === 'table') chartType = 'stat';
         else if (p.type === 'gauge') chartType = 'gauge';
-        else if (p.type === 'barchart' || p.type === 'bar') chartType = 'line'; // use line for bar
 
         // Map unit
-        const unit = p.fieldConfig?.defaults?.unit || p.units || '';
+        const rawUnit = p.fieldConfig?.defaults?.unit || p.units || '';
+        const unit = rawUnit.replace('percentunit', 'percent').replace('decbytes', 'bytes').replace('Bps', 'bytes').replace('short', '').replace('none', '');
 
         // Grid: Grafana uses 24-col, we use 24-col
         const gridW = p.gridPos?.w || 12;
@@ -248,20 +252,47 @@ const MonitorDashboardPage: React.FC = () => {
         const gridX = p.gridPos?.x || 0;
         const gridY = p.gridPos?.y ? Math.round(p.gridPos.y / 2) + yOff : yOff;
 
-        // Combine multiple targets into one panel if they share the same panel
-        const allQueries = queries.length > 1 ? queries.join(' OR ') : query;
+        // Build PromQL from targets — each target becomes its own panel
+        const targets = (p.targets || []).filter((t: any) => t.expr || t.query);
 
-        meerkatPanels.push({
-          id: `p${Date.now()}_${meerkatPanels.length}`,
-          title: p.title || 'Panel',
-          query: allQueries,
-          unit: unit.replace('percentunit', 'percent').replace('decbytes', 'bytes').replace('s', 'seconds').replace('Bps', 'bytes'),
-          type: chartType,
-          grid: { x: gridX, y: gridY, w: Math.min(gridW, 24), h: gridH },
-          legend: p.description || '',
-          thresholds: (p.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
-        });
-        yOff = gridY + gridH;
+        if (!targets.length) continue;
+
+        // If only 1 target, keep as one panel
+        if (targets.length === 1) {
+          let q = cleanPromQL(targets[0].expr || targets[0].query || '');
+          if (!q) continue;
+          meerkatPanels.push({
+            id: `p${Date.now()}_${meerkatPanels.length}`,
+            title: p.title || 'Panel',
+            query: q,
+            unit,
+            type: chartType,
+            grid: { x: gridX, y: gridY, w: Math.min(gridW, 24), h: gridH },
+            legend: p.description || '',
+            thresholds: (p.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
+          });
+          yOff = gridY + gridH;
+        } else {
+          // Multiple targets — each gets its own sub-panel
+          const subW = Math.max(Math.floor(gridW / targets.length), 4);
+          for (let i = 0; i < targets.length; i++) {
+            const t = targets[i];
+            let q = cleanPromQL(t.expr || t.query || '');
+            if (!q) continue;
+            const subX = gridX + i * subW;
+            meerkatPanels.push({
+              id: `p${Date.now()}_${meerkatPanels.length}`,
+              title: t.legend || p.title || `Query ${i + 1}`,
+              query: q,
+              unit,
+              type: chartType,
+              grid: { x: subX, y: gridY, w: subW, h: gridH },
+              legend: t.legend || '',
+              thresholds: (p.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
+            });
+          }
+          yOff = gridY + gridH;
+        }
       }
 
       if (!meerkatPanels.length) { message.error(t('noPanelsInImport')); return; }
