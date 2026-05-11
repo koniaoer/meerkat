@@ -85,23 +85,23 @@ class DashboardStats(BaseModel):
 
 class PrometheusAlert(BaseModel):
     status: str
-    labels: Dict[str, str]
-    annotations: Dict[str, str]
-    startsAt: str
-    endsAt: str
-    generatorURL: str
-    fingerprint: str
+    labels: Dict[str, str] = {}
+    annotations: Dict[str, str] = {}
+    startsAt: Optional[str] = None
+    endsAt: Optional[str] = None
+    generatorURL: Optional[str] = None
+    fingerprint: Optional[str] = None
 
 class PrometheusWebhook(BaseModel):
-    receiver: str
+    receiver: Optional[str] = None
     status: str
     alerts: List[PrometheusAlert]
-    groupLabels: Dict[str, str]
-    commonLabels: Dict[str, str]
-    commonAnnotations: Dict[str, str]
-    externalURL: str
-    version: str
-    groupKey: str
+    groupLabels: Dict[str, str] = {}
+    commonLabels: Dict[str, str] = {}
+    commonAnnotations: Dict[str, str] = {}
+    externalURL: Optional[str] = None
+    version: Optional[str] = None
+    groupKey: Optional[str] = None
     truncatedAlerts: int = 0
 
 class UserCreate(BaseModel):

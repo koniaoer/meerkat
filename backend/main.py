@@ -469,6 +469,7 @@ async def test_notification_channel(channel_id: int, db: Session = Depends(get_d
 # ─── Alert Endpoints ──────────────────────────────────────────────────────────
 @app.post("/api/v1/alerts")
 async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = Depends(get_db)):
+    logger.info("Received webhook: receiver=%s status=%s alerts=%d", webhook_data.receiver, webhook_data.status, len(webhook_data.alerts))
     active_config = crud.get_active_model_config(db)
 
     # Decrypt API key for AI service
@@ -567,11 +568,21 @@ async def receive_alert(webhook_data: schemas.PrometheusWebhook, db: Session = D
             else:
                 analysis = {"summary": "重复告警，AI分析已缓存", "root_cause": "", "suggestion": "", "severity": "low"}
         else:
-            # Call AI with rate limiting
+            # Call AI with rate limiting + timeout
             if active_config:
                 await ai_rate_limiter.acquire()
                 try:
-                    analysis = await ai_service.analyze_alert_with_ai(alert.model_dump(), active_config)
+                    import asyncio
+                    analysis = await asyncio.wait_for(
+                        ai_service.analyze_alert_with_ai(alert.model_dump(), active_config),
+                        timeout=15.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("AI analysis timed out for alert %s, using fallback", alert.labels.get("alertname", "unknown"))
+                    analysis = {"summary": "AI 分析超时，请稍后重试", "root_cause": "", "suggestion": "", "severity": "low"}
+                except Exception as e:
+                    logger.warning("AI analysis failed for alert %s: %s", alert.labels.get("alertname", "unknown"), e)
+                    analysis = {"summary": f"AI 分析失败: {str(e)[:80]}", "root_cause": "", "suggestion": "", "severity": "low"}
                 finally:
                     ai_rate_limiter.release()
                 # Cache the result
