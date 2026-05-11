@@ -295,14 +295,18 @@ const KnowledgeBase: React.FC = () => {
           <Form.Item name="title" label={t('title')} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Space style={{ width: '100%' }} size="middle">
-            <Form.Item name="category" label={t('category')} style={{ width: '50%' }}>
-              <Select options={catOptions} />
-            </Form.Item>
-            <Form.Item name="alert_name" label={t('alertName')} style={{ width: '50%' }}>
-              <Input placeholder={t('optional')} />
-            </Form.Item>
-          </Space>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="category" label={t('category')}>
+                <Select options={catOptions} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="alert_name" label={t('alertName')}>
+                <Input placeholder={t('optional')} />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item name="tags" label={t('tags')}>
             <Input placeholder="tag1,tag2,..." />
           </Form.Item>
