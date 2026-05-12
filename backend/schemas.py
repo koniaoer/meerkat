@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+import json
 
 class ModelConfigBase(BaseModel):
     provider_name: str
@@ -145,8 +146,15 @@ class LoginRequest(BaseModel):
 class NotificationChannelCreate(BaseModel):
     channel_type: str
     name: str
-    config: str
+    config: str | dict = "{}"
     is_active: bool = True
+
+    @model_validator(mode='before')
+    @classmethod
+    def ensure_config_str(cls, values):
+        if isinstance(values.get('config'), dict):
+            values['config'] = json.dumps(values['config'], ensure_ascii=False)
+        return values
 
 class NotificationChannelResponse(BaseModel):
     id: int
