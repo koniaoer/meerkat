@@ -380,6 +380,10 @@ export const translations: Translation = {
   'noPanelsInImport': { zh: '未找到有效面板', en: 'No valid panels found' },
   'importedDashboard': { zh: '导入的看板', en: 'Imported Dashboard' },
   'panels': { zh: '个面板', en: 'panels' },
+  'pause': { zh: '暂停刷新', en: 'Pause' },
+  'resume': { zh: '恢复刷新', en: 'Resume' },
+  'fullscreen': { zh: '全屏', en: 'Fullscreen' },
+  'exitFullscreen': { zh: '退出全屏', en: 'Exit Fullscreen' },
 };
 
 interface LanguageContextType {
