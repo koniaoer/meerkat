@@ -428,10 +428,16 @@ class PanelConfig(BaseModel):
     title: str
     query: str
     unit: Optional[str] = None
-    type: str = "line"  # line / stat / gauge
+    type: str = "line"  # line / stat / gauge / table / bargauge
+    queryMode: Optional[str] = None  # 'range' (default) or 'instant'
     grid: dict = {"x": 0, "y": 0, "w": 12, "h": 4}
     legend: Optional[str] = None
     thresholds: Optional[list] = None
+    section: Optional[str] = None  # Row section grouping
+    targetsInfo: Optional[list] = None  # For table panels: per-target info
+
+    class Config:
+        from_attributes = True
 
 class MonitorDashboardCreate(BaseModel):
     name: str
@@ -452,5 +458,6 @@ class MonitorDashboardResponse(BaseModel):
     created_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
     class Config:
         from_attributes = True

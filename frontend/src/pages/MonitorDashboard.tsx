@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Row, Col, Card, Select, Button, Space, Modal, Form, Input, InputNumber, message, Popconfirm, Empty, Spin, Tag, Tooltip, Switch, Typography, Divider } from 'antd';
+import { Row, Col, Card, Select, Button, Space, Modal, Form, Input, InputNumber, message, Popconfirm, Empty, Spin, Tag, Tooltip, Switch, Typography, Divider, Table } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, SettingOutlined, LineChartOutlined, DashboardOutlined, ApiOutlined, FullscreenOutlined, ImportOutlined } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
@@ -46,32 +46,84 @@ const normalizeTimeRange = (range: string): string => {
 };
 
 const formatValue = (val: number, unit?: string): string => {
-  if (unit === 'bytes') {
+  if (val === null || val === undefined || isNaN(val)) return '-';
+  // Byte units
+  if (unit === 'bytes' || unit === 'decbytes' || unit === 'binbytes') {
+    if (Math.abs(val) >= 1099511627776) return (val / 1099511627776).toFixed(2) + ' TB';
     if (Math.abs(val) >= 1073741824) return (val / 1073741824).toFixed(2) + ' GB';
     if (Math.abs(val) >= 1048576) return (val / 1048576).toFixed(2) + ' MB';
     if (Math.abs(val) >= 1024) return (val / 1024).toFixed(2) + ' KB';
     return val.toFixed(0) + ' B';
   }
-  if (unit === 'percent' || unit === '%') return val.toFixed(1) + '%';
+  if (unit === 'decmbytes' || unit === 'mbytes') {
+    const bytes = val * 1048576;
+    if (Math.abs(bytes) >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
+    if (Math.abs(bytes) >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
+    return val.toFixed(0) + ' MiB';
+  }
+  if (unit === 'kbytes') {
+    const bytes = val * 1024;
+    if (Math.abs(bytes) >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
+    if (Math.abs(bytes) >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
+    return val.toFixed(0) + ' KiB';
+  }
+  // Percent
+  if (unit === 'percent' || unit === '%' || unit === 'packedpercent') return val.toFixed(1) + '%';
+  if (unit === 'percentunit') return (val * 100).toFixed(1) + '%';
+  // Time
   if (unit === 'seconds' || unit === 's') {
     if (val >= 86400) return (val / 86400).toFixed(1) + 'd';
     if (val >= 3600) return (val / 3600).toFixed(1) + 'h';
     if (val >= 60) return (val / 60).toFixed(1) + 'm';
     return val.toFixed(1) + 's';
   }
+  if (unit === 'ms') { const v = val / 1000; return v < 60 ? v.toFixed(2) + 's' : (v / 60).toFixed(1) + 'm'; }
+  // Temperature
   if (unit === 'celsius' || unit === '°C') return val.toFixed(1) + '°C';
-  if (unit === 'bps') {
+  // Bit rate
+  if (unit === 'bps' || unit === 'binbps') {
     if (Math.abs(val) >= 1e9) return (val / 1e9).toFixed(2) + ' Gbps';
     if (Math.abs(val) >= 1e6) return (val / 1e6).toFixed(2) + ' Mbps';
     if (Math.abs(val) >= 1e3) return (val / 1e3).toFixed(2) + ' Kbps';
     return val.toFixed(0) + ' bps';
   }
+  // Byte rate
+  if (unit === 'Bps' || unit === 'binBps') {
+    if (Math.abs(val) >= 1073741824) return (val / 1073741824).toFixed(2) + ' GB/s';
+    if (Math.abs(val) >= 1048576) return (val / 1048576).toFixed(2) + ' MB/s';
+    if (Math.abs(val) >= 1024) return (val / 1024).toFixed(2) + ' KB/s';
+    return val.toFixed(0) + ' B/s';
+  }
+  // Frequency
+  if (unit === 'hertz' || unit === 'Hz') {
+    if (Math.abs(val) >= 1e9) return (val / 1e9).toFixed(2) + ' GHz';
+    if (Math.abs(val) >= 1e6) return (val / 1e6).toFixed(2) + ' MHz';
+    if (Math.abs(val) >= 1e3) return (val / 1e3).toFixed(2) + ' KHz';
+    return val.toFixed(0) + ' Hz';
+  }
+  // Power
+  if (unit === 'watt' || unit === 'W') return Math.abs(val) >= 1000 ? (val / 1000).toFixed(2) + ' kW' : val.toFixed(1) + ' W';
+  // Operations
   if (unit === 'reqps') return val.toFixed(1) + ' req/s';
-  if (unit === 'iops') return val.toFixed(0) + ' iops';
+  if (unit === 'iops' || unit === 'ops') return val.toFixed(0) + ' iops';
+  // Default: smart number
   if (Math.abs(val) >= 1e9) return (val / 1e9).toFixed(2) + 'G';
   if (Math.abs(val) >= 1e6) return (val / 1e6).toFixed(2) + 'M';
   if (Math.abs(val) >= 1e3) return (val / 1e3).toFixed(2) + 'K';
   return val.toFixed(2);
+};
+
+// Map Grafana unit strings to our internal unit names
+const mapGrafanaUnit = (raw: string): string => {
+  const m: Record<string, string> = {
+    percentunit: 'percent', decbytes: 'bytes', binbytes: 'bytes',
+    decmbytes: 'decmbytes', kbytes: 'kbytes', mbytes: 'mbytes',
+    Bps: 'Bps', binBps: 'Bps', binbps: 'bps',
+    short: '', none: '', ops: 'iops',
+    packedpercent: 'percent', s: 'seconds', ms: 'ms',
+    hertz: 'hertz', watt: 'watt',
+  };
+  return m[raw] || raw;
 };
 
 // Strip $var from panel titles
@@ -114,12 +166,11 @@ const MonitorDashboardPage: React.FC = () => {
   useEffect(() => { loadData(); }, []);
 
   // Fetch panel data — supports multi-query format "q1|||leg1;;;q2|||leg2"
+  // Supports both range queries (for line charts) and instant queries (for table/stat/gauge)
   const fetchPanelData = useCallback(async (panel: any, dsId?: number) => {
     if (!panel.query) return;
-    const now = Math.floor(Date.now() / 1000);
-    const seconds = parseRange(timeRange);
-    const start = now - seconds;
-    const step = seconds <= 300 ? '15' : seconds <= 3600 ? '60' : seconds <= 86400 ? '120' : '300';
+    const ds = dsId || currentDash?.datasource_id;
+    const useInstant = panel.queryMode === 'instant';
 
     // Parse multi-query format
     // Primary: ;;; separator (from import)
@@ -133,7 +184,6 @@ const MonitorDashboardPage: React.FC = () => {
         if (expr?.trim()) queries.push({ expr: expr.trim(), legend });
       }
     } else if (panel.query.includes('|||')) {
-      // Old format with ; separator and ||| legend markers
       for (const part of panel.query.split(';')) {
         const sepIdx = part.indexOf('|||');
         const expr = sepIdx >= 0 ? part.substring(0, sepIdx) : part;
@@ -147,10 +197,20 @@ const MonitorDashboardPage: React.FC = () => {
     // Fetch all queries in parallel
     const promises = queries.map(async (q) => {
       try {
-        const res = await prometheusQueryRange({
-          query: q.expr, start: start.toString(), end: now.toString(), step,
-          ds_id: dsId || currentDash?.datasource_id,
-        });
+        let res;
+        if (useInstant) {
+          // Instant query — for table/stat/gauge panels
+          res = await prometheusQuery(q.expr, ds);
+        } else {
+          // Range query — for line chart panels
+          const now = Math.floor(Date.now() / 1000);
+          const seconds = parseRange(timeRange);
+          const start = now - seconds;
+          const step = seconds <= 300 ? '15' : seconds <= 3600 ? '60' : seconds <= 86400 ? '120' : '300';
+          res = await prometheusQueryRange({
+            query: q.expr, start: start.toString(), end: now.toString(), step, ds_id: ds,
+          });
+        }
         if (res.data?.status === 'success') {
           return { expr: q.expr, legend: q.legend, data: res.data.data };
         }
@@ -254,9 +314,9 @@ const MonitorDashboardPage: React.FC = () => {
   const cleanPromQL = (q: string): string => {
     // 1. Remove [[var]] variables
     q = q.replace(/\[\[[\w.]+\]\]/g, '');
-    // 2. Remove ${var} and $var variables
+    // 2. Remove ${var} and $var variables (but NOT ${label} in legendFormat like {{device}})
     q = q.replace(/\$\{[\w.]+\}/g, '').replace(/\$[\w.]+/g, '');
-    // 3. Clean up empty label matchers
+    // 3. Clean up empty label matchers (where $var was removed, leaving key=~"")
     q = q.replace(/,?\s*\w+\s*=~?\s*["'][^"']*["']/g, (m) => {
       const val = m.match(/=~?\s*["']([^"']*)["']/);
       if (val && val[1].trim()) return m;
@@ -272,6 +332,8 @@ const MonitorDashboardPage: React.FC = () => {
     q = q.trim();
     // 7. Remove leading/trailing OR
     q = q.replace(/^OR\s+/i, '').replace(/\s+OR$/i, '');
+    // 8. Fix Grafana typos (e.g. vorigin_prometheus -> origin_prometheus, then gets cleaned)
+    q = q.replace(/vorigin_prometheus/g, 'origin_prometheus');
     return q;
   };
 
@@ -306,22 +368,33 @@ const MonitorDashboardPage: React.FC = () => {
         return (a.gridPos?.x || 0) - (b.gridPos?.x || 0);
       });
 
-      // Find max Y to normalize grid
-      const maxY = flatPanels.reduce((max, p) => Math.max(max, p.gridPos?.y || 0), 0);
-
       for (const p of flatPanels) {
-        // Map Grafana panel type
+        // Map Grafana panel type to our types + query mode
         let chartType = 'line';
-        if (p.type === 'stat' || p.type === 'singlestat') chartType = 'stat';
-        else if (p.type === 'gauge') chartType = 'gauge';
-        else if (p.type === 'table') chartType = 'stat';
-        else if (p.type === 'barchart' || p.type === 'bar') chartType = 'line';
+        let queryMode = 'range';
+
+        if (p.type === 'stat' || p.type === 'singlestat') {
+          chartType = 'stat';
+          queryMode = 'instant';
+        } else if (p.type === 'gauge') {
+          chartType = 'gauge';
+          queryMode = 'instant';
+        } else if (p.type === 'table') {
+          chartType = 'table';
+          queryMode = 'instant';
+        } else if (p.type === 'bargauge') {
+          chartType = 'bargauge';
+          queryMode = 'instant';
+        } else if (p.type === 'barchart' || p.type === 'bar') {
+          chartType = 'line';
+        } else if (p.type === 'graph') {
+          // Old Grafana graph type — always use range for time-series
+          chartType = 'line';
+        }
 
         // Map unit
-        const rawUnit = p.fieldConfig?.defaults?.unit || p.units || '';
-        const unit = rawUnit.replace('percentunit', 'percent').replace('decbytes', 'bytes')
-          .replace('Bps', 'bps').replace('short', '').replace('none', '')
-          .replace('ops', 'iops').replace('packedpercent', 'percent');
+        const rawUnit = p.fieldConfig?.defaults?.unit || p.units || p.yaxes?.[0]?.format || '';
+        const unit = mapGrafanaUnit(rawUnit);
 
         // Grid: Grafana uses 24-col grid
         const gridW = p.gridPos?.w || 12;
@@ -329,15 +402,15 @@ const MonitorDashboardPage: React.FC = () => {
         const gridX = p.gridPos?.x || 0;
         const gridY = p.gridPos?.y || 0;
 
-        // Build PromQL from targets — keep ALL targets in ONE panel
-        const targets = (p.targets || []).filter((t: any) => t.expr || t.query);
+        // Build PromQL from targets — FILTER OUT hidden targets
+        const targets = (p.targets || []).filter((t: any) => (t.expr || t.query) && t.hide !== true);
         if (!targets.length) continue;
 
         // Collect all cleaned queries with their legends
         const queries: { expr: string; legend: string }[] = [];
         for (const t of targets) {
           let q = cleanPromQL(t.expr || t.query || '');
-          if (q) queries.push({ expr: q, legend: t.legend || '' });
+          if (q) queries.push({ expr: q, legend: t.legendFormat || t.legend || '' });
         }
         if (!queries.length) continue;
 
@@ -349,8 +422,13 @@ const MonitorDashboardPage: React.FC = () => {
         // Clean title of $variables
         const panelTitle = cleanTitle(p.title || 'Panel');
 
-        // Find if this panel belongs to a row section (for grouping display)
-        const parentRow = rowSections.reverse().find(r => r.y <= gridY);
+        // Find if this panel belongs to a row section
+        const parentRow = [...rowSections].reverse().find(r => r.y <= gridY);
+
+        // For table panels, store per-target info for column rendering
+        const targetsInfo = chartType === 'table'
+          ? queries.map(q => ({ legend: q.legend, expr: q.expr.substring(0, 60) }))
+          : undefined;
 
         meerkatPanels.push({
           id: `p${Date.now()}_${meerkatPanels.length}`,
@@ -358,10 +436,12 @@ const MonitorDashboardPage: React.FC = () => {
           query: queryStr,
           unit,
           type: chartType,
+          queryMode,
           grid: { x: gridX, y: gridY, w: Math.min(gridW, 24), h: gridH },
           legend: p.description || '',
           thresholds: (p.thresholds?.steps || p.fieldConfig?.defaults?.thresholds?.steps || []).map((s: any) => ({ value: s.value, color: s.color })),
           section: parentRow?.title || '',
+          targetsInfo,
         });
       }
 
@@ -431,6 +511,106 @@ const MonitorDashboardPage: React.FC = () => {
     const grid = panel.grid || { w: 12, h: 8 };
     const isWide = grid.w >= 16;
     const isNarrow = grid.w <= 6;
+
+    // TABLE type — render as antd Table with instance rows and query columns
+    if (panel.type === 'table') {
+      const legends = multiData.map(mq => mq.legend || mq.expr.substring(0, 30));
+      const uniqueLegends = [...new Set(legends)];
+
+      const columns: any[] = [
+        { title: 'IP', dataIndex: '_instance', key: '_instance', width: 140, fixed: 'left' as const,
+          render: (v: string) => <Text strong style={{ fontSize: 11 }}>{v?.replace(/:\d+$/, '')}</Text> },
+      ];
+      // Try to get nodename from first query that has it
+      const hasNodename = allResults.some(r => r.metric?.nodename);
+      if (hasNodename) {
+        columns.push({ title: '主机名', dataIndex: '_nodename', key: '_nodename', width: 120,
+          render: (v: string) => <span style={{ fontSize: 11 }}>{v || '-'}</span> });
+      }
+      for (const leg of uniqueLegends) {
+        columns.push({
+          title: leg, dataIndex: leg, key: leg, width: 90,
+          render: (v: string) => <span style={{ fontSize: 11 }}>{v || '-'}</span>,
+        });
+      }
+
+      // Build rows grouped by instance
+      const rowsMap: Record<string, any> = {};
+      for (const mq of multiData) {
+        const legend = mq.legend || mq.expr.substring(0, 30);
+        for (const r of (mq.data?.result || [])) {
+          const inst = r.metric?.instance || 'unknown';
+          const key = inst.replace(/:\d+$/, '');
+          if (!rowsMap[key]) rowsMap[key] = { _instance: inst, _nodename: r.metric?.nodename || '', key };
+          const rawVal = r.value?.[1] ?? r.values?.[r.values.length - 1]?.[1] ?? null;
+          if (rawVal !== null) {
+            const numVal = parseFloat(rawVal);
+            // Smart unit detection based on column name
+            if (legend.includes('内存') && !legend.includes('率')) rowsMap[key][legend] = formatValue(numVal, 'bytes');
+            else if (legend.includes('使用率') || (legend.includes('CPU') && !legend.includes('核') && !legend.includes('iowait')))
+              rowsMap[key][legend] = formatValue(numVal, 'percent');
+            else if (legend.includes('带宽') || legend.includes('下载') || legend.includes('上传')) rowsMap[key][legend] = formatValue(numVal, 'bps');
+            else if (legend.includes('读取') || legend.includes('写入')) rowsMap[key][legend] = formatValue(numVal, 'Bps');
+            else if (legend.includes('运行') || legend.includes('启动')) rowsMap[key][legend] = formatValue(numVal, 'seconds');
+            else if (legend.includes('IOutil') || legend.includes('iowait')) rowsMap[key][legend] = formatValue(numVal, 'percent');
+            else if (legend.includes('连接') || legend === 'TCP_tw') rowsMap[key][legend] = formatValue(numVal, '');
+            else rowsMap[key][legend] = formatValue(numVal, panel.unit || '');
+          }
+        }
+      }
+
+      const dataSource = Object.values(rowsMap);
+      return (
+        <Table
+          columns={columns}
+          dataSource={dataSource}
+          size="small"
+          pagination={false}
+          scroll={{ x: columns.length * 90, y: grid.h * 30 }}
+          style={{ fontSize: 11 }}
+        />
+      );
+    }
+
+    // BARGAUGE type — horizontal bar gauges
+    if (panel.type === 'bargauge') {
+      const items = allResults.slice(0, 12).map((r: any) => {
+        const latest = r.values?.[r.values.length - 1]?.[1] || r.value?.[1] || 0;
+        const numVal = parseFloat(latest);
+        let label = r._legend || '';
+        if (!label) {
+          label = Object.entries(r.metric || {})
+            .filter(([k, v]) => typeof v === 'string' && v !== '' && k !== '__name__')
+            .map(([, v]) => v).join(' · ');
+        }
+        // Apply percentunit conversion for display
+        const displayVal = panel.unit === 'percentunit' ? numVal * 100 : numVal;
+        const displayUnit = panel.unit === 'percentunit' ? 'percent' : panel.unit;
+        return { numVal: displayVal, label, displayUnit };
+      });
+
+      const maxVal = Math.max(...items.map(i => Math.abs(i.numVal)), 1);
+      const thresholds = panel.thresholds || [];
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: 2, height: '100%', overflow: 'auto' }}>
+          {items.map((item, i) => {
+            let barColor = '#52c41a';
+            for (const th of thresholds) {
+              if (item.numVal >= (th.value ?? 0)) barColor = th.color;
+            }
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: isNarrow ? 60 : 90, fontSize: 9, color: 'var(--ant-color-text-secondary, #666)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>{item.label}</div>
+                <div style={{ flex: 1, background: 'var(--ant-color-fill-quaternary, #f5f5f5)', borderRadius: 2, height: 14, position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ width: `${(Math.abs(item.numVal) / maxVal) * 100}%`, height: '100%', background: barColor, borderRadius: 2, transition: 'width 0.3s' }} />
+                </div>
+                <div style={{ width: 50, fontSize: 9, fontWeight: 600, textAlign: 'right', flexShrink: 0 }}>{formatValue(item.numVal, item.displayUnit)}</div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
 
     // Stat type
     if (panel.type === 'stat') {
@@ -583,6 +763,7 @@ const MonitorDashboardPage: React.FC = () => {
       const queryPreview = panel.query?.includes(';;;')
         ? panel.query.split(';;;').length + ' queries'
         : (panel.query || '').substring(0, 60);
+      const typeIcon = panel.type === 'table' ? '📊' : panel.type === 'bargauge' ? '📏' : panel.type === 'gauge' ? '🎯' : panel.type === 'stat' ? '🔢' : '📈';
 
       return (
         <div key={panel.id} style={{
@@ -796,6 +977,8 @@ const MonitorDashboardPage: React.FC = () => {
                   { label: `📈 ${t('lineChart')}`, value: 'line' },
                   { label: `🔢 ${t('statChart')}`, value: 'stat' },
                   { label: `🎯 ${t('gaugeChart')}`, value: 'gauge' },
+                  { label: `📊 Table`, value: 'table' },
+                  { label: `📏 Bar Gauge`, value: 'bargauge' },
                 ]} />
               </Form.Item>
             </Col>
@@ -803,9 +986,13 @@ const MonitorDashboardPage: React.FC = () => {
               <Form.Item name="unit" label={t('unit')}>
                 <Select allowClear options={[
                   { label: 'none', value: '' }, { label: '%', value: 'percent' },
-                  { label: 'bytes', value: 'bytes' }, { label: 'seconds', value: 'seconds' },
-                  { label: 'bps', value: 'bps' }, { label: '°C', value: 'celsius' },
+                  { label: '% (0-1→0-100)', value: 'percentunit' },
+                  { label: 'bytes', value: 'bytes' }, { label: 'MiB', value: 'decmbytes' },
+                  { label: 'seconds', value: 'seconds' }, { label: 'ms', value: 'ms' },
+                  { label: 'bps', value: 'bps' }, { label: 'B/s', value: 'Bps' },
+                  { label: '°C', value: 'celsius' },
                   { label: 'iops', value: 'iops' }, { label: 'req/s', value: 'reqps' },
+                  { label: 'Hz', value: 'hertz' }, { label: 'W', value: 'watt' },
                 ]} />
               </Form.Item>
             </Col>
