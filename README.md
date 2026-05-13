@@ -1,114 +1,181 @@
-# Meerkat 🦝
+<div align="center">
+
+# 🦝 Meerkat
+
+**AI 智能运维平台** · Intelligent Operations Platform
+
+[![CI](https://github.com/koniaoer/meerkat/actions/workflows/ci.yml/badge.svg)](https://github.com/koniaoer/meerkat/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![React 18](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Ant Design 5](https://img.shields.io/badge/Ant_Design-5-0170FE?logo=antdesign&logoColor=white)](https://ant.design/)
 
 <p align="center">
-  <strong>AI运维助手</strong><br>
-  AI 驱动 · 多渠道通知 · 暗黑模式 · RBAC 权限控制
+  <img src="https://img.shields.io/badge/AI_Analysis-DeepSeek%20%7C%20Claude%20%7C%20OpenAI-66CCFF?style=flat-square" alt="AI Models" />
+  <img src="https://img.shields.io/badge/Notifications-DingTalk%20%7C%20WeChat%20%7C%20Slack%20%7C%20Email-52C41A?style=flat-square" alt="Channels" />
+  <img src="https://img.shields.io/badge/Theme-Dark_%E2%97%BC_Light-66CCFF?style=flat-square" alt="Theme" />
+  <img src="https://img.shields.io/badge/Auth-RBAC_JWT-FA8C16?style=flat-square" alt="Auth" />
 </p>
+
+Meerkat 是一款 AI 驱动的智能运维告警分析平台，接收 Prometheus Alertmanager 告警，自动分析根因、生成修复建议、触发自动化修复，并通过多渠道实时通知。
+
+[🚀 快速开始](#-快速开始) · [⚙️ 配置](#️-配置指南) · [📂 项目结构](#-项目结构) · [🔌 API](#-api-概览) · [🤝 贡献](#-贡献)
+
+</div>
 
 ---
 
-## 🌟 核心特性
+## ✨ 功能特性
 
-- **AI 智能分析** — 接收 Prometheus Alertmanager Webhook 告警，调用大语言模型自动分析故障摘要、根因推断与修复建议
-- **多渠道通知** — 支持钉钉、企业微信、Slack、Email、自定义 Webhook，每种渠道支持预存测试
-- **AI 自动修复** — 告警触发后自动执行预定义修复脚本（Remediation Actions），支持人工审批
-- **多模型切换** — 兼容 OpenAI 协议，支持 DeepSeek / Claude / Azure OpenAI 等模型，一键切换
-- **RBAC 权限** — admin / operator / viewer 三级角色，JWT 认证
-- **暗黑模式** — 深海蓝 + 洛天依蓝(#66CCFF)主题，一键切换
-- **容器化部署** — Docker Compose 一键启动，PostgreSQL 持久化存储
+<table>
+<tr>
+<td width="50%">
+
+### 🧠 AI 智能分析
+- 接收 Alertmanager Webhook 告警
+- 调用 LLM 自动生成故障摘要
+- 根因推断与修复建议
+- 支持告警重新分析
+- 兼容 OpenAI 协议多模型切换
+
+</td>
+<td width="50%">
+
+### 🔔 多渠道通知
+- 钉钉机器人（加签验证）
+- 企业微信机器人
+- Slack Webhook
+- SMTP Email
+- 自定义 Webhook
+- 每种渠道支持预存测试
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🔧 自动修复
+- 预定义修复模板（命令/脚本/HTTP）
+- 自动/人工审批双模式
+- 告警触发自动执行修复动作
+- 修复结果追踪
+
+</td>
+<td width="50%">
+
+### 📊 监控仪表盘
+- Prometheus 数据源管理
+- Grafana 风格 Dashboard
+- 实时指标查询与可视化
+- 健康状态阈值检测
+- 网格/列表/表格多视图
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 💬 ChatOps
+- 自然语言交互式运维
+- AI 根据告警上下文回答
+- 快捷命令（统计/值班/搜索）
+- 会话管理与历史记录
+
+</td>
+<td width="50%">
+
+### 🛡️ 企业级特性
+- RBAC 三级权限（admin/operator/viewer）
+- JWT 认证 + 密钥 Fernet 加密
+- 告警去重与静默
+- 告警路由规则
+- 升级策略（Escalation）
+- 操作审计日志
+
+</td>
+</tr>
+</table>
 
 ## 🛠️ 技术栈
 
-| 层 | 技术 |
-|---|------|
-| 后端 | Python 3.11, FastAPI, SQLAlchemy, PostgreSQL |
-| 前端 | React 18, TypeScript, Ant Design 5, Vite |
-| AI | OpenAI SDK (兼容协议) |
-| 基础设施 | Docker, Docker Compose, Nginx |
-| 监控 | Prometheus, Alertmanager |
+| 层级 | 技术 |
+|:----:|:-----|
+| **后端** | Python 3.11 · FastAPI · SQLAlchemy · PostgreSQL · Fernet |
+| **前端** | React 18 · TypeScript · Ant Design 5 · Vite · ECharts |
+| **AI** | OpenAI SDK (兼容协议) · DeepSeek / Claude / Azure OpenAI |
+| **运维** | Docker · Docker Compose · Nginx · Prometheus · Alertmanager |
 
 ## 🚀 快速开始
 
 ### 前置条件
 
 - Docker & Docker Compose
-- (可选) 需要监控的 Prometheus + Alertmanager 环境
+- （可选）Prometheus + Alertmanager 监控环境
 
-### 1. 克隆项目
+### 1️⃣ 克隆项目
 
 ```bash
 git clone https://github.com/koniaoer/meerkat.git
 cd meerkat
 ```
 
-### 2. 启动服务
+### 2️⃣ 一键启动
 
 ```bash
 docker compose up --build -d
 ```
 
-首次启动会自动：
-- 创建 PostgreSQL 数据库
-- 运行数据库迁移（自动建表）
-- 创建默认管理员账号 `admin / admin@123`
+首次启动自动完成：
+- ✅ 创建 PostgreSQL 数据库
+- ✅ 运行数据库迁移（自动建表）
+- ✅ 创建默认管理员 `admin / admin@123`
 
-### 3. 访问服务
+### 3️⃣ 访问服务
 
 | 服务 | 地址 |
-|------|------|
-| 管理后台 | http://localhost:3000 |
-| API 文档 (Swagger) | http://localhost:8000/docs |
-| API 文档 (ReDoc) | http://localhost:8000/redoc |
+|:----:|:----:|
+| 🖥️ 管理后台 | http://localhost:3000 |
+| 📖 Swagger API 文档 | http://localhost:8000/docs |
+| 📖 ReDoc API 文档 | http://localhost:8000/redoc |
 
-### 4. 登录
-
-默认管理员账号：
-```
-用户名: admin
-密码: admin@123
-```
-
-> ⚠️ 首次登录后请及时修改密码！
+> ⚠️ 首次登录后请及时修改默认密码！
 
 ## ⚙️ 配置指南
 
-### 1. 配置 AI 模型
+### 配置 AI 模型
 
-1. 登录后台 → 进入 **AI Models** 页面
+1. 登录后台 → **AI Models** 页面
 2. 点击 **Add Model**，填写：
-   - **Provider**: 模型提供商（如 DeepSeek）
-   - **Model Name**: 模型标识（如 `deepseek-chat`）
-   - **Base URL**: API 端点（如 `https://api.deepseek.com/v1`）
-   - **API Key**: 你的 API 密钥
+   - **Provider**: `deepseek` / `openai` / `azure` / `anthropic` 等
+   - **Model Name**: 如 `deepseek-chat`
+   - **Base URL**: 如 `https://api.deepseek.com/v1`
+   - **API Key**: 你的密钥
 3. 勾选 **Set as Active** → 保存
 
-### 2. 配置通知渠道
+### 配置通知渠道
 
-1. 进入 **通知渠道** 页面
-2. 点击 **新增渠道**
-3. 选择渠道类型（钉钉 / 企业微信 / Slack / Email / Webhook）
-4. 填写对应配置参数
-5. 点击 **测试推送** 验证连通性 → 保存
+1. 进入 **通知渠道** 页面 → **新增渠道**
+2. 选择类型 → 填写配置 → **测试推送** → 保存
 
-#### 钉钉机器人配置示例
+<details>
+<summary>📋 渠道配置示例</summary>
 
+**钉钉机器人**
 ```json
 {
-  "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=xxx",
-  "secret": "SECxxx"
+  "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=***",
+  "secret": "SEC***"
 }
 ```
 
-#### 企业微信机器人配置示例
-
+**企业微信机器人**
 ```json
 {
-  "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+  "webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=***"
 }
 ```
 
-#### Email 配置示例
-
+**Email**
 ```json
 {
   "smtp_host": "smtp.example.com",
@@ -121,11 +188,19 @@ docker compose up --build -d
 }
 ```
 
-### 3. 配置 Alertmanager Webhook
+**Slack**
+```json
+{
+  "webhook_url": "https://hooks.slack.com/services/***"
+}
+```
 
-修改 `alertmanager.yml`，将告警转发至 Meerkat：
+</details>
+
+### 配置 Alertmanager Webhook
 
 ```yaml
+# alertmanager.yml
 route:
   receiver: 'meerkat-webhook'
 
@@ -136,18 +211,171 @@ receivers:
     send_resolved: true
 ```
 
-### 4. 配置自动修复 (Remediation Actions)
+### 配置自动修复
 
-1. 进入 **自动修复** 页面
-2. 创建修复动作：
-   - **名称**: 如 `restart-service`
-   - **描述**: 如 `重启异常服务`
-   - **配置**: JSON 格式的执行指令
-   - **自动审批**: 开启后无需人工确认
+1. 进入 **自动修复模板** 页面 → 创建模板
+2. 定义匹配规则（告警名/标签/关键词）
+3. 配置修复动作（命令/脚本/HTTP 请求）
+4. 选择审批模式（自动/人工）
 
-## 🏗️ 离线部署（无外网环境）
+## 📂 项目结构
 
-适用于目标服务器无法访问外网的情况：
+```
+meerkat/
+├── backend/                        # FastAPI 后端
+│   ├── main.py                     # 应用入口 + 全部路由
+│   ├── models.py                   # SQLAlchemy 数据模型
+│   ├── schemas.py                  # Pydantic 请求/响应模式
+│   ├── database.py                 # 数据库连接配置
+│   ├── auth.py                     # JWT 认证 & RBAC
+│   ├── crud.py                     # 数据库 CRUD 操作
+│   ├── ai_service.py               # AI 模型调用逻辑
+│   ├── action_executor.py          # 自动修复执行器
+│   ├── alert_dedup.py              # 告警去重引擎
+│   ├── alert_router.py             # 告警路由分发
+│   ├── alert_suppressor.py         # 告警静默
+│   ├── chatops_engine.py           # ChatOps 对话引擎
+│   ├── escalation_engine.py        # 升级策略引擎
+│   ├── remediation_recommender.py  # 修复推荐器
+│   ├── dingtalk_service.py         # 钉钉服务
+│   ├── notification/               # 通知渠道模块
+│   │   ├── base.py                 # 通知基类
+│   │   ├── manager.py              # 通知管理器
+│   │   ├── dingtalk.py             # 钉钉
+│   │   ├── wechat.py               # 企业微信
+│   │   ├── slack.py                # Slack
+│   │   ├── email_channel.py        # Email
+│   │   └── webhook.py              # 自定义 Webhook
+│   ├── tests/                      # 后端测试
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/                       # React 前端
+│   ├── src/
+│   │   ├── App.tsx                 # 主布局（侧边栏 + 路由）
+│   │   ├── main.tsx                # 入口（主题 + 国际化）
+│   │   ├── index.css               # 全局样式 + 动画
+│   │   ├── pages/
+│   │   │   ├── Overview.tsx        # 概览页
+│   │   │   ├── Dashboard.tsx       # 告警仪表盘
+│   │   │   ├── MonitorDashboard.tsx# 监控仪表盘
+│   │   │   ├── AlertDetail.tsx     # 告警详情
+│   │   │   ├── AlertRules.tsx      # 告警规则
+│   │   │   ├── ModelConfig.tsx     # AI 模型配置
+│   │   │   ├── NotificationChannels.tsx  # 通知渠道
+│   │   │   ├── RemediationActions.tsx    # 自动修复
+│   │   │   ├── RemediationTemplates.tsx  # 修复模板
+│   │   │   ├── ChatOps.tsx         # ChatOps 对话
+│   │   │   ├── KnowledgeBase.tsx   # 知识库
+│   │   │   ├── OnCallSchedule.tsx  # 值班排班
+│   │   │   ├── EscalationPolicy.tsx# 升级策略
+│   │   │   ├── AuditLog.tsx        # 审计日志
+│   │   │   ├── UserManagement.tsx  # 用户管理
+│   │   │   └── Login.tsx           # 登录页
+│   │   └── services/
+│   │       ├── api.ts              # Axios API 封装
+│   │       ├── i18n.tsx            # 中英文国际化
+│   │       └── theme.tsx           # 主题切换（亮/暗）
+│   ├── nginx.conf                  # Nginx 配置
+│   ├── Dockerfile
+│   └── package.json
+├── prometheus/                     # Prometheus 示例配置
+├── alertmanager/                   # Alertmanager 示例配置
+├── docker-compose.yml              # 容器编排
+└── README.md
+```
+
+## 🔌 API 概览
+
+### 认证
+
+| 方法 | 路径 | 说明 |
+|:----:|:-----|:-----|
+| `POST` | `/api/v1/auth/login` | 登录获取 JWT |
+| `POST` | `/api/v1/auth/register` | 注册新用户 |
+| `GET` | `/api/v1/auth/me` | 获取当前用户信息 |
+
+### 告警
+
+| 方法 | 路径 | 说明 |
+|:----:|:-----|:-----|
+| `POST` | `/api/v1/alerts` | 接收 Alertmanager Webhook |
+| `GET` | `/api/v1/alerts` | 获取告警列表 |
+| `GET` | `/api/v1/alerts/{id}` | 获取告警详情 |
+| `PUT` | `/api/v1/alerts/{id}/acknowledge` | 确认告警 |
+| `PUT` | `/api/v1/alerts/{id}/silence` | 静默告警 |
+| `DELETE` | `/api/v1/alerts/{id}` | 删除告警 |
+| `POST` | `/api/v1/alerts/batch-delete` | 批量删除 |
+| `POST` | `/api/v1/alerts/{id}/reanalyze` | 重新分析 |
+| `GET` | `/api/v1/alerts/stats` | 告警统计 |
+| `GET` | `/api/v1/dashboard/stats` | 仪表盘统计 |
+
+### 通知渠道
+
+| 方法 | 路径 | 说明 |
+|:----:|:-----|:-----|
+| `GET` | `/api/v1/notification-channels` | 获取渠道列表 |
+| `POST` | `/api/v1/notification-channels` | 创建渠道 |
+| `PUT` | `/api/v1/notification-channels/{id}` | 更新渠道 |
+| `DELETE` | `/api/v1/notification-channels/{id}` | 删除渠道 |
+| `POST` | `/api/v1/notification-channels/test` | 预存测试 |
+| `POST` | `/api/v1/notification-channels/{id}/test` | 已保存测试 |
+
+### AI 模型
+
+| 方法 | 路径 | 说明 |
+|:----:|:-----|:-----|
+| `GET` | `/api/v1/model-configs` | 获取模型列表 |
+| `POST` | `/api/v1/model-configs` | 创建模型配置 |
+| `PUT` | `/api/v1/model-configs/{id}` | 更新模型 |
+| `DELETE` | `/api/v1/model-configs/{id}` | 删除模型 |
+| `GET` | `/api/v1/model-configs/active` | 获取当前激活模型 |
+| `POST` | `/api/v1/model-configs/test` | 测试模型连通性 |
+
+### 自动修复
+
+| 方法 | 路径 | 说明 |
+|:----:|:-----|:-----|
+| `GET` | `/api/v1/remediation-actions` | 修复动作列表 |
+| `PUT` | `/api/v1/remediation-actions/{id}/approve` | 审批修复 |
+| `POST` | `/api/v1/remediation-actions/{id}/execute` | 执行修复 |
+| `DELETE` | `/api/v1/remediation-actions/{id}` | 删除修复 |
+
+### 修复模板
+
+| 方法 | 路径 | 说明 |
+|:----:|:-----|:-----|
+| `GET` | `/api/v1/remediation-templates` | 模板列表 |
+| `POST` | `/api/v1/remediation-templates` | 创建模板 |
+| `PUT` | `/api/v1/remediation-templates/{id}` | 更新模板 |
+| `DELETE` | `/api/v1/remediation-templates/{id}` | 删除模板 |
+| `POST` | `/api/v1/remediation-templates/{id}/apply/{alert_id}` | 应用模板 |
+
+### ChatOps
+
+| 方法 | 路径 | 说明 |
+|:----:|:-----|:-----|
+| `POST` | `/api/v1/chat` | 发送消息 |
+| `GET` | `/api/v1/chat/{session_id}` | 获取会话历史 |
+| `GET` | `/api/v1/chat-sessions` | 获取会话列表 |
+| `DELETE` | `/api/v1/chat-sessions/{id}` | 删除会话 |
+
+### 监控
+
+| 方法 | 路径 | 说明 |
+|:----:|:-----|:-----|
+| `GET` | `/api/v1/datasources` | 数据源列表 |
+| `POST` | `/api/v1/datasources` | 创建数据源 |
+| `POST` | `/api/v1/datasources/{id}/test` | 测试连通性 |
+| `GET` | `/api/v1/prometheus/query` | PromQL 即时查询 |
+| `GET` | `/api/v1/prometheus/query_range` | PromQL 范围查询 |
+| `GET` | `/api/v1/monitor-dashboards` | 仪表盘列表 |
+| `POST` | `/api/v1/monitor-dashboards` | 创建仪表盘 |
+
+> 📖 完整 API 文档请访问 Swagger UI: `http://localhost:8000/docs`
+
+## 🏗️ 离线部署
+
+适用于无外网的目标服务器：
 
 ```bash
 # 1. 本地构建镜像
@@ -159,106 +387,28 @@ docker save meerkat-backend:latest meerkat-frontend:latest | gzip > meerkat-imag
 # 3. 传输到目标服务器
 scp meerkat-images.tar.gz root@<TARGET>:/tmp/
 
-# 4. 目标服务器加载镜像
+# 4. 目标服务器加载并启动
 ssh root@<TARGET> 'docker load < /tmp/meerkat-images.tar.gz'
-
-# 5. 目标服务器启动（需要先同步项目文件）
 ssh root@<TARGET> 'cd /opt/meerkat && docker compose up -d'
 ```
 
-> 如目标服务器已有服务占用 3000/8000/5432 端口，需修改 `docker-compose.yml` 中的端口映射。
-
-## 📂 项目结构
-
-```
-meerkat/
-├── backend/                    # FastAPI 后端
-│   ├── main.py                 # 应用入口 + 路由定义
-│   ├── models.py               # SQLAlchemy 数据模型
-│   ├── schemas.py              # Pydantic 请求/响应模式
-│   ├── database.py             # 数据库连接配置
-│   ├── auth.py                 # JWT 认证 & RBAC
-│   ├── crud.py                 # 数据库 CRUD 操作
-│   ├── ai_service.py           # AI 模型调用逻辑
-│   ├── action_executor.py      # 自动修复执行器
-│   ├── alert_dedup.py          # 告警去重
-│   ├── notification/           # 通知渠道模块
-│   │   ├── base.py             # 通知基类
-│   │   ├── manager.py          # 通知管理器
-│   │   ├── dingtalk.py         # 钉钉通知
-│   │   ├── wechat.py           # 企业微信通知
-│   │   ├── slack.py            # Slack 通知
-│   │   ├── email_channel.py    # Email 通知
-│   │   └── webhook.py          # 自定义 Webhook
-│   ├── tests/                  # 后端测试
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/                   # React 前端
-│   ├── src/
-│   │   ├── App.tsx             # 主布局（侧边栏 + 路由）
-│   │   ├── main.tsx            # 入口（主题 + 国际化）
-│   │   ├── pages/              # 页面组件
-│   │   │   ├── Dashboard.tsx   # 告警仪表盘
-│   │   │   ├── Overview.tsx    # 概览页
-│   │   │   ├── Login.tsx       # 登录页
-│   │   │   ├── AlertDetail.tsx # 告警详情
-│   │   │   ├── NotificationChannels.tsx  # 通知渠道管理
-│   │   │   ├── RemediationActions.tsx    # 自动修复管理
-│   │   │   ├── UserManagement.tsx        # 用户管理 (admin)
-│   │   │   └── ModelConfig.tsx           # AI 模型配置
-│   │   └── services/
-│   │       ├── api.ts          # Axios API 封装
-│   │       ├── i18n.tsx        # 中英文国际化
-│   │       └── theme.tsx       # 主题切换（亮/暗）
-│   ├── nginx.conf              # Nginx 配置（API 代理）
-│   ├── Dockerfile
-│   └── package.json
-├── prometheus/                 # Prometheus 配置（示例）
-│   ├── prometheus.yml
-│   └── rules/demo.yml
-├── alertmanager/               # Alertmanager 配置（示例）
-│   └── alertmanager.yml
-├── docker-compose.yml          # Docker Compose 编排
-└── README.md
-```
-
-## 🔑 API 概览
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/auth/login` | 登录获取 JWT |
-| GET | `/api/v1/auth/me` | 获取当前用户信息 |
-| POST | `/api/v1/auth/register` | 注册新用户 |
-| GET | `/api/v1/alerts` | 获取告警列表 |
-| GET | `/api/v1/alerts/stats` | 获取告警统计 |
-| POST | `/api/v1/alerts` | 接收 Alertmanager Webhook |
-| GET | `/api/v1/notification-channels` | 获取通知渠道列表 |
-| POST | `/api/v1/notification-channels` | 创建通知渠道 |
-| POST | `/api/v1/notification-channels/test` | 测试推送（预存前） |
-| POST | `/api/v1/notification-channels/{id}/test` | 测试推送（已保存） |
-| GET | `/api/v1/model-configs` | 获取 AI 模型列表 |
-| POST | `/api/v1/model-configs` | 创建 AI 模型配置 |
-| GET | `/api/v1/remediation-actions` | 获取修复动作列表 |
-| POST | `/api/v1/remediation-actions/{id}/execute` | 执行修复动作 |
-| GET | `/api/v1/users` | 获取用户列表 (admin) |
-
-> 完整 API 文档请访问 Swagger UI: `http://localhost:8000/docs`
+> 如端口冲突，修改 `docker-compose.yml` 中的端口映射（如 `3001:80`、`8001:8000`、`5433:5432`）。
 
 ## 🎨 主题定制
 
-Meerkat 使用洛天依蓝 (#66CCFF) 作为主色调：
+Meerkat 使用 **洛天依蓝** (#66CCFF) 作为主色调，深海蓝暗色模式：
 
-| 模式 | 主色 | 背景 |
-|------|------|------|
-| 亮色 | `#66CCFF` | `#f0f5fa` |
-| 暗黑 | `#4DB8E8` | `#0d1b2a` → `#112240` |
+| 模式 | 主色 | 页面背景 | 容器背景 |
+|:----:|:----:|:--------:|:--------:|
+| ☀️ 亮色 | `#66CCFF` | `#f0f5fa` | `#ffffff` |
+| 🌙 暗色 | `#4DB8E8` | `#0d1b2a` | `#112240` |
 
-主题配置位于 `frontend/src/main.tsx`，修改 `token` 中的颜色值即可自定义。
+修改 `frontend/src/main.tsx` 中 `token` 颜色值即可自定义主题。
 
 ## 🔐 安全说明
 
-- 所有 API（登录/注册除外）需要 JWT Bearer Token 认证
-- 通知渠道的密钥使用 Fernet 对称加密存储
+- 所有 API（登录/注册除外）需 JWT Bearer Token 认证
+- 通知渠道密钥使用 **Fernet 对称加密** 存储
 - 加密密钥通过环境变量 `ENCRYPTION_KEY` 注入，**请勿提交到版本库**
 - 默认 JWT 密钥仅用于开发，生产环境请更换 `JWT_SECRET_KEY`
 
@@ -289,6 +439,24 @@ cd backend
 pytest tests/ -v
 ```
 
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交改动 (`git commit -m 'feat: add amazing feature'`)
+4. 推送分支 (`git push origin feature/amazing-feature`)
+5. 发起 Pull Request
+
 ## 📄 开源协议
 
 [MIT License](LICENSE)
+
+---
+
+<div align="center">
+
+**Meerkat** · AI 智能运维平台 · [GitHub](https://github.com/koniaoer/meerkat)
+
+</div>
