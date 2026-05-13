@@ -87,7 +87,7 @@ export const translations: Translation = {
   testSuccess: { zh: '测试连接成功！', en: 'Connection Successful!' },
   testFailed: { zh: '测试连接失败', en: 'Connection Failed' },
   // Auth / Login
-  systemTitle: { zh: 'Prometheus 告警分析系统', en: 'Prometheus Alert Analysis System' },
+  systemTitle: { zh: 'AI 智能运维平台', en: 'AI Intelligent Ops Platform' },
   username: { zh: '用户名', en: 'Username' },
   password: { zh: '密码', en: 'Password' },
   login: { zh: '登录', en: 'Login' },

@@ -3,7 +3,7 @@ import { Layout, Menu, Button, Space, Spin, Tooltip } from 'antd';
 import {
   DashboardOutlined, SettingOutlined, HomeOutlined,
   TranslationOutlined, BellOutlined, LogoutOutlined,
-  ThunderboltOutlined, UserOutlined, BulbOutlined,
+  ThunderboltOutlined, UserOutlined, BulbOutlined, SunOutlined, MoonOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined,
   SafetyOutlined, FileSearchOutlined,
   TeamOutlined, RiseOutlined,
@@ -275,9 +275,9 @@ const AppContent = () => {
             <Tooltip title={isDark ? t('switchToLight') : t('switchToDark')}>
               <Button
                 type="text"
-                icon={<BulbOutlined />}
+                icon={isDark ? <SunOutlined /> : <MoonOutlined />}
                 onClick={toggleTheme}
-                style={{ color: isDark ? '#66CCFF' : '#4DB8E8' }}
+                style={{ color: isDark ? '#66CCFF' : '#4DB8E8', fontSize: 18 }}
               />
             </Tooltip>
             <Button
