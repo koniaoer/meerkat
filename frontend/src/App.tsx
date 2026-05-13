@@ -268,8 +268,8 @@ const AppContent = () => {
           gap: 8,
           height: 56,
           lineHeight: '56px',
-          borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid #f0f0f0',
-          background: isDark ? '#112240' : '#fff',
+          borderBottom: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid var(--ant-color-border-secondary)',
+          background: isDark ? '#112240' : 'var(--ant-color-bg-container)',
         }}>
           <Space size={4}>
             <Tooltip title={isDark ? t('switchToLight') : t('switchToDark')}>

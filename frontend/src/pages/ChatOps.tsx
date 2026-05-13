@@ -129,9 +129,9 @@ const ChatOps: React.FC = () => {
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: s.session_id === sessionId ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    <MessageOutlined style={{ marginRight: 4, color: '#999' }} />{s.title}
+                    <MessageOutlined style={{ marginRight: 4, color: 'var(--ant-color-text-tertiary)' }} />{s.title}
                   </div>
-                  <div style={{ fontSize: 11, color: '#999', display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                  <div style={{ fontSize: 11, color: 'var(--ant-color-text-tertiary)', display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
                     <span>{s.msg_count} 条消息</span>
                     <span>{formatTime(s.last_at)}</span>
                   </div>
@@ -158,7 +158,7 @@ const ChatOps: React.FC = () => {
 
         {/* Quick commands */}
         <Space style={{ marginBottom: 8 }} wrap>
-          <Text style={{ color: '#999', fontSize: 12 }}>{t('commandHint')}:</Text>
+          <Text style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 12 }}>{t('commandHint')}:</Text>
           {quickCommands.map((qc, i) => (
             <Tooltip key={i} title={qc.cmd}>
               <Tag style={{ cursor: 'pointer' }} onClick={() => sendMessage(qc.cmd)}>{qc.icon} {qc.label}</Tag>
@@ -169,7 +169,7 @@ const ChatOps: React.FC = () => {
         {/* Messages area */}
         <Card style={{ flex: 1, overflow: 'auto', marginBottom: 8, padding: 0 }} bodyStyle={{ padding: '12px 16px' }}>
           {messages.length === 0 && (
-            <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>
+            <div style={{ textAlign: 'center', color: 'var(--ant-color-text-tertiary)', padding: 40 }}>
               <div style={{ fontSize: 48, marginBottom: 8 }}>🤖</div>
               <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>Meerkat ChatOps</div>
               <div style={{ fontSize: 12, lineHeight: 2 }}>
@@ -189,14 +189,14 @@ const ChatOps: React.FC = () => {
                 <div style={{
                   maxWidth: 420, padding: '8px 12px', borderRadius: 8,
                   background: msg.role === 'user' ? 'var(--ant-color-primary, #1890ff)' : 'var(--ant-color-bg-elevated, #fafafa)',
-                  color: msg.role === 'user' ? '#fff' : 'var(--ant-color-text, #333)',
+                  color: msg.role === 'user' ? '#fff' : 'var(--ant-color-text)',
                   fontSize: 13, lineHeight: 1.6,
                   ...(msg.role === 'user' ? { borderBottomRightRadius: 2 } : { borderBottomLeftRadius: 2 }),
                 }}>
                   {renderContent(msg.content)}
                   {msg.action_taken && <div style={{ marginTop: 4, fontSize: 11, opacity: 0.7 }}>⚡ {msg.action_taken}</div>}
                 </div>
-                <div style={{ fontSize: 10, color: '#bbb', marginTop: 2, textAlign: msg.role === 'user' ? 'right' : 'left' }}>
+                <div style={{ fontSize: 10, color: 'var(--ant-color-text-quaternary)', marginTop: 2, textAlign: msg.role === 'user' ? 'right' : 'left' }}>
                   {formatTime(msg.created_at)}
                 </div>
               </div>
@@ -208,7 +208,7 @@ const ChatOps: React.FC = () => {
           {sending && (
             <div style={{ display: 'flex', marginBottom: 10 }}>
               <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--ant-color-primary, #1890ff)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, marginRight: 8, flexShrink: 0 }}>🤖</div>
-              <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--ant-color-bg-elevated, #fafafa)', fontSize: 13, color: '#999' }}>
+              <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--ant-color-bg-elevated, #fafafa)', fontSize: 13, color: 'var(--ant-color-text-tertiary)' }}>
                 正在思考<span className="dotting">...</span>
               </div>
             </div>

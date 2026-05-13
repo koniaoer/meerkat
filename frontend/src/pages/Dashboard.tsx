@@ -22,7 +22,7 @@ const MiniBarChart: React.FC<{ data: { date: string; total: number; resolved: nu
             <div style={{ width: 10, background: '#ff4d4f', height: `${(d.total / maxVal) * 60}px`, borderRadius: 2, transition: 'height 0.3s' }} />
             <div style={{ width: 10, background: '#52c41a', height: `${(d.resolved / maxVal) * 60}px`, borderRadius: 2, transition: 'height 0.3s' }} />
           </div>
-          <span style={{ fontSize: 10, color: '#999' }}>{d.date}</span>
+          <span style={{ fontSize: 10, color: 'var(--ant-color-text-tertiary)' }}>{d.date}</span>
         </div>
       ))}
     </div>
@@ -220,7 +220,7 @@ const Dashboard: React.FC = () => {
                 <Tag>{count}</Tag>
               </div>
             ))}
-            {Object.keys(as.by_alert_name || {}).length === 0 && <span style={{ color: '#999' }}>-</span>}
+            {Object.keys(as.by_alert_name || {}).length === 0 && <span style={{ color: 'var(--ant-color-text-tertiary)' }}>-</span>}
           </Card>
         </Col>
       </Row>

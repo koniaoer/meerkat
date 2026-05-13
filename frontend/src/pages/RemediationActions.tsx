@@ -133,7 +133,7 @@ const RemediationActions: React.FC = () => {
     {
       title: t('actionType'), dataIndex: 'action_type', key: 'action_type', width: 95,
       render: (type: string) => {
-        const cfg = typeIconMap[type] || { label: type, color: '#999' };
+        const cfg = typeIconMap[type] || { label: type, color: 'var(--ant-color-text-tertiary)' };
         return <Tag style={{ margin: 0, color: cfg.color, borderColor: cfg.color }}>{cfg.label}</Tag>;
       },
     },
