@@ -1,7 +1,7 @@
 # Meerkat 🦝
 
 <p align="center">
-  <strong>智能 Prometheus 告警分析助手</strong><br>
+  <strong>AI运维助手</strong><br>
   AI 驱动 · 多渠道通知 · 暗黑模式 · RBAC 权限控制
 </p>
 
