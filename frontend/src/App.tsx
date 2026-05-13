@@ -99,6 +99,10 @@ const AppContent = () => {
     if (authState === 'unauthenticated' && location.pathname !== '/login') {
       navigate('/login', { replace: true });
     }
+    // After login, auth-change sets authState to 'authenticated' — navigate away from /login
+    if (authState === 'authenticated' && location.pathname === '/login') {
+      navigate('/', { replace: true });
+    }
   }, [authState, location.pathname, navigate]);
 
   const handleLogout = () => {

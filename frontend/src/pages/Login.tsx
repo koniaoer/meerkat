@@ -3,13 +3,11 @@ import { Form, Input, Button, Card, Typography, message, Space } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { login, register } from '../services/api';
 import { useLanguage } from '../services/i18n';
-import { useNavigate } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
 const Login: React.FC = () => {
   const { t } = useLanguage();
-  const navigate = useNavigate();
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
@@ -30,10 +28,11 @@ const Login: React.FC = () => {
         localStorage.setItem('displayName', display_name || '');
         window.dispatchEvent(new Event('auth-change'));
         message.success(t('loginSuccess'));
-        navigate('/');
+        // Don't navigate('/') here — auth-change will update authState,
+        // and App.tsx will auto-navigate away from /login when authState = 'authenticated'
       }
     } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || t('failed');
+      const errorMsg = error.response?.data?.detail || t('loginFailed');
       message.error(errorMsg);
     } finally {
       setLoading(false);
