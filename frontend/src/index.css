@@ -90,7 +90,7 @@ body[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
 
 /* ─── Login page background gradient ─── */
 body[data-theme="dark"] .login-bg {
-  background: linear-gradient(135deg, #050d1a 0%, #0a1628 25%, #112240 50%, #0f3460 75%, #0a2040 100%) !important;
+  background: linear-gradient(135deg, #040c18 0%, #081428 20%, #0d1f3c 40%, #0f2d55 60%, #0a1e40 80%, #060f20 100%) !important;
   position: relative;
 }
 body[data-theme="dark"] .login-bg::before {
@@ -100,13 +100,23 @@ body[data-theme="dark"] .login-bg::before {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(ellipse at 30% 20%, rgba(102,204,255,0.04) 0%, transparent 50%),
-              radial-gradient(ellipse at 70% 80%, rgba(77,184,232,0.03) 0%, transparent 50%);
-  animation: login-glow 15s ease-in-out infinite alternate;
+  background:
+    radial-gradient(ellipse at 25% 15%, rgba(102,204,255,0.06) 0%, transparent 45%),
+    radial-gradient(ellipse at 75% 85%, rgba(77,184,232,0.04) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 50%, rgba(51,153,204,0.02) 0%, transparent 60%);
+  animation: login-glow 20s ease-in-out infinite alternate;
   pointer-events: none;
 }
+body[data-theme="dark"] .login-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2366CCFF' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: 0.6;
+}
 body[data-theme="light"] .login-bg {
-  background: linear-gradient(135deg, #e8f7ff 0%, #f0f9ff 35%, #dbeafe 65%, #e0f2fe 100%) !important;
+  background: linear-gradient(135deg, #e0f4ff 0%, #eaf6ff 25%, #d6ecfa 50%, #cde7f8 75%, #e2f3fc 100%) !important;
   position: relative;
 }
 body[data-theme="light"] .login-bg::before {
@@ -116,15 +126,26 @@ body[data-theme="light"] .login-bg::before {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(ellipse at 30% 20%, rgba(102,204,255,0.06) 0%, transparent 50%),
-              radial-gradient(ellipse at 70% 80%, rgba(77,184,232,0.04) 0%, transparent 50%);
-  animation: login-glow 15s ease-in-out infinite alternate;
+  background:
+    radial-gradient(ellipse at 25% 15%, rgba(102,204,255,0.08) 0%, transparent 45%),
+    radial-gradient(ellipse at 75% 85%, rgba(77,184,232,0.05) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 50%, rgba(51,153,204,0.03) 0%, transparent 60%);
+  animation: login-glow 20s ease-in-out infinite alternate;
   pointer-events: none;
+}
+body[data-theme="light"] .login-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%234DB8E8' fill-opacity='0.025'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: 0.5;
 }
 
 @keyframes login-glow {
-  0%   { transform: translate(0, 0) rotate(0deg); }
-  100% { transform: translate(2%, 1%) rotate(1deg); }
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50%  { transform: translate(1.5%, 0.8%) rotate(0.5deg) scale(1.02); }
+  100% { transform: translate(-1%, -0.5%) rotate(-0.3deg) scale(1); }
 }
 
 /* ─── Login inputs: remove autofill background clash in dark mode ─── */
